@@ -5,13 +5,22 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Update package list and install Zsh
-install_zsh() {
+update_and_upgrade(){
     echo "Updating package list..."
     sudo apt update
 
-    echo "Installing Zsh..."
-    sudo apt install -y zsh
+    echo "Upgrading package list..."
+    sudo apt upgrade -y
+}
+
+# install Zsh
+install_zsh() {
+    if ! command_exists zsh; then
+        echo "Installing Zsh..."
+        sudo apt install -y zsh
+    else
+        echo "zsh is already installed."
+    fi
 }
 
 # Install Oh My Posh
@@ -41,7 +50,8 @@ set_oh_my_posh_theme() {
 
     echo "Setting the theme in .zshrc..."
     if ! grep -q "oh-my-posh" ~/.zshrc; then
-        echo 'eval "$(oh-my-posh init zsh --config ~/.oh-my-posh/themes/kushal.omp.json)"' >> ~/.zshrc
+        echo 'eval "$(oh-my-posh init zsh --config ~/.oh-my-posh/themes/blue-owl.omp.json)"' >> ~/.zshrc
+        # echo 'eval "$(oh-my-posh init zsh --config ~/.oh-my-posh/themes/kushal.omp.json)"' >> ~/.zshrc
     fi
 }
 
@@ -129,16 +139,14 @@ clone_dotfiles() {
     fi
 }
 
-# Check if Zsh is installed
-if command_exists zsh; then
-    echo "Zsh is already installed."
-else
-    install_zsh
-fi
+
+
+update_and_upgrade
 
 # Install things one always need
 install_essentials
 
+install_zsh
 
 # Change the default shell to Zsh
 echo "Changing default shell to Zsh..."
