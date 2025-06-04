@@ -17,9 +17,9 @@ fi
 echo "[1/10] 🛠️ Installing Nix (multi-user mode)..."
 if ! command -v nix >/dev/null; then
     # Pre-install checks
-    if ! grep -q "nixbld" /etc/group; then
-        sudo groupadd --system nixbld
-    fi
+    # if ! grep -q "nixbld" /etc/group; then
+    #     sudo groupadd --system nixbld
+    # fi
     
     # Secure install with checksums
     curl -L https://releases.nixos.org/nix/nix-2.20.3/install | \
