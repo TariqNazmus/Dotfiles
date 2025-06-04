@@ -16,21 +16,24 @@ fi
 # ✅ Install Nix if not already installed
 echo "[1/10] 🛠️ Installing Nix (multi-user mode)..."
 if ! command -v nix >/dev/null; then
-    # Pre-install checks
-    # if ! grep -q "nixbld" /etc/group; then
-    #     sudo groupadd --system nixbld
-    # fi
-    
-    # Secure install with checksums
-    curl -L https://releases.nixos.org/nix/nix-2.20.3/install | \
-        sh -s -- --daemon --no-channel-add
-    
-    # Verify installation
-    if ! command -v nix; then
-        echo "❌ Nix installation failed!"
-        exit 1
-    fi
+  curl -L https://nixos.org/nix/install | sh -s -- --daemon
 fi
+# if ! command -v nix >/dev/null; then
+#     # Pre-install checks
+#     if ! grep -q "nixbld" /etc/group; then
+#         sudo groupadd --system nixbld
+#     fi
+    
+#     # Secure install with checksums
+#     curl -L https://releases.nixos.org/nix/nix-2.20.3/install | \
+#         sh -s -- --daemon --no-channel-add
+    
+#     # Verify installation
+#     if ! command -v nix; then
+#         echo "❌ Nix installation failed!"
+#         exit 1
+#     fi
+# fi
 
 # ✅ Source nix environment
 echo "[2/10] 🔌 Sourcing nix environment..."
