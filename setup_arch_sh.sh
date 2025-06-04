@@ -2,7 +2,7 @@
 set -euo pipefail
 
 USERNAME="sadat"
-NIXPKGS_COMMIT="f9f18451e1e75a28744d8f8811e3c4b82bba0a9f"  # pinned to 2025-06
+NIXPKGS_COMMIT="9c09d5e27cd07348e2177fcca51badb0446f1a43"
 NIXPKGS="github:NixOS/nixpkgs/${NIXPKGS_COMMIT}"
 
 echo "[1/6] Installing Nix (multi-user mode)..."
