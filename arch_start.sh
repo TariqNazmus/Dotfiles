@@ -88,10 +88,9 @@ pacman -S --noconfirm base-devel git curl terminus-font
 echo "🛠️ Installing paru for AUR package management..."
 if ! command -v paru > /dev/null; then
     cd "$USER_HOME"
-    git clone https://aur.archlinux.org/paru.git
-    chown -R "$MAIN_USER:$MAIN_USER" paru
+    sudo -u "$MAIN_USER" git clone https://aur.archlinux.org/paru.git
     cd paru
-    su "$MAIN_USER" -c "makepkg -si --noconfirm"
+    sudo -u "$MAIN_USER" makepkg -si --noconfirm
     cd "$USER_HOME"
     rm -rf paru
     touch "$STATE_DIR/paru_installed"
@@ -100,7 +99,7 @@ fi
 # Step 6: Install JetBrains Mono Nerd Font
 echo "🖌️ Installing JetBrains Mono Nerd Font..."
 echo "ttf-jetbrains-mono-nerd" >> "$STATE_DIR/installed_packages"
-su "$MAIN_USER" -c "paru -S --noconfirm ttf-jetbrains-mono-nerd"
+sudo -u "$MAIN_USER" paru -S --noconfirm ttf-jetbrains-mono-nerd
 
 # Step 7: Apply font to virtual console
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
