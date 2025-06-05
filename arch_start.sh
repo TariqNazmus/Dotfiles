@@ -96,7 +96,7 @@ pacman -Q base-devel git curl terminus-font xorg-mkfontscale ttf-jetbrains-mono-
 }
 
 echo "🔍 Checking for existing Nix installation..."
-if command -v nix > /dev/null 2>&1; then
+if [ -f "/home/$MAIN_USER/.nix-profile/bin/nix" ]; then
     echo "⚠️ Nix is already installed, skipping installation."
     exit 0
 fi
@@ -124,7 +124,7 @@ fi
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
 if [ -f /etc/vconsole.conf ]; then
     cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
-fi
+}
 echo "FONT=ter-v16n" > /etc/vconsole.conf
 mkfontscale /usr/share/fonts/terminus
 fc-cache -fv
@@ -135,7 +135,7 @@ mkdir -p "$USER_HOME/.config/xfce4/xfce4-terminal"
 chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4" "$USER_HOME/.config/xfce4/xfce4-terminal"
 if [ -f "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc" ]; then
     cp "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc" "$STATE_DIR/xfce4-terminal-config.bak"
-fi
+}
 cat << EOF > "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc"
 [Configuration]
 FontName=JetBrainsMono Nerd Font 12
@@ -147,16 +147,27 @@ echo "🛠️ Installing Nix package manager..."
 sudo -u "$MAIN_USER" sh -c "curl -L https://nixos.org/nix/install | sh -s -- --no-daemon"
 touch "$STATE_DIR/nix_installed"
 
-# Step 9: Source Nix environment for the current session
+# Step 9: Verify Nix installation
+echo "✅ Verifying Nix installation files..."
+[ -d "/nix/store" ] || {
+    echo "❌ Nix store (/nix/store) not found!"
+    exit 1
+}
+[ -f "/home/$MAIN_USER/.nix-profile/bin/nix" ] || {
+    echo "❌ Nix binary not found in user profile!"
+    exit 1
+}
+
+# Step 10: Source Nix environment for the current session
 echo "🔧 Sourcing Nix environment..."
 if [ -f "/home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh" ]; then
     source "/home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh"
 else
     echo "❌ Failed to find Nix environment script!"
     exit 1
-fi
+}
 
-# Step 10: Configure Nix with pinned Nixpkgs version
+# Step 11: Configure Nix with pinned Nixpkgs version
 echo "📝 Configuring Nix with pinned Nixpkgs version (25.05)..."
 mkdir -p "/home/$MAIN_USER/.config/nix"
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix"
@@ -168,21 +179,21 @@ EOF
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix/nix.conf"
 
 # Pin Nixpkgs to 25.05
-sudo -u "$MAIN_USER" nix-channel --add https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz nixpkgs
-sudo -u "$MAIN_USER" nix-channel --update
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --add https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz nixpkgs"
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --update"
 
-# Step 11: Verify Nix installation
-echo "✅ Verifying Nix installation..."
-nix --version > /dev/null || {
+# Step 12: Verify Nix configuration
+echo "✅ Verifying Nix configuration..."
+/home/$MAIN_USER/.nix-profile/bin/nix --version > /dev/null || {
     echo "❌ Nix installation verification failed!"
     exit 1
 }
-sudo -u "$MAIN_USER" nix-channel --list | grep "nixpkgs.*25.05" > /dev/null || {
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --list" | grep "nixpkgs.*25.05" > /dev/null || {
     echo "❌ Nixpkgs version pinning verification failed!"
     exit 1
 }
 
-# Step 12: Clean up state if successful
+# Step 13: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 2 complete: Nix package manager installed and configured with Nixpkgs 25.05! 🚀"
 echo "ℹ️ JetBrains Mono Nerd Font applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font' in their preferences."
