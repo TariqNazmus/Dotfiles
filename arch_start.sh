@@ -187,7 +187,7 @@ chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4/xfce4-terminal/terminalr
 # Step 8: Install Nix package manager
 echo "🛠️ Installing Nix package manager..."
 progress_bar 20 "Installing Nix..."
-su - "$MAIN_USER" -c "curl -L https://nixos.org/nix/install | sh -s -- --no-daemon"
+sudo - "$MAIN_USER" -c "curl -L https://nixos.org/nix/install | sh -s -- --no-daemon"
 touch "$STATE_DIR/nix_installed"
 
 # Step 9: Verify Nix installation
