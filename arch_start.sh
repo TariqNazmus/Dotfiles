@@ -74,15 +74,15 @@ pacman -Syu --noconfirm
 
 # Step 3: Check for existing packages to avoid unnecessary installs
 echo "🔍 Checking for existing packages..."
-pacman -Q base-devel git curl terminus-font ttf-jetbrains-mono-nerd > /dev/null 2>&1 && {
+pacman -Q base-devel git curl terminus-font xorg-mkfontscale ttf-jetbrains-mono-nerd > /dev/null 2>&1 && {
     echo "⚠️ Some packages already installed, skipping installation."
     exit 0
 }
 
-# Step 4: Install base-devel, git, curl, and terminus-font (for virtual console)
-echo "📦 Installing base-devel, git, curl, and terminus-font..."
-echo "base-devel git curl terminus-font" > "$STATE_DIR/installed_packages"
-pacman -S --noconfirm base-devel git curl terminus-font
+# Step 4: Install base-devel, git, curl, terminus-font, and xorg-mkfontscale
+echo "📦 Installing base-devel, git, curl, terminus-font, and xorg-mkfontscale..."
+echo "base-devel git curl terminus-font xorg-mkfontscale" > "$STATE_DIR/installed_packages"
+pacman -S --noconfirm base-devel git curl terminus-font xorg-mkfontscale
 
 # Step 5: Install paru (AUR helper) for JetBrains Mono Nerd Font
 echo "🛠️ Installing paru for AUR package management..."
@@ -107,7 +107,7 @@ if [ -f /etc/vconsole.conf ]; then
     cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
 fi
 echo "FONT=ter-v16n" > /etc/vconsole.conf
-mkfontdir /usr/share/fonts/terminus
+mkfontscale /usr/share/fonts/terminus
 fc-cache -fv
 
 # Step 8: Configure JetBrains Mono Nerd Font for GUI terminals (example: xfce4-terminal)
@@ -125,7 +125,7 @@ chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4/xfce4-terminal/terminalr
 
 # Step 9: Verify installations
 echo "✅ Verifying installed packages..."
-for pkg in git curl terminus-font ttf-jetbrains-mono-nerd; do
+for pkg in git curl terminus-font xorg-mkfontscale ttf-jetbrains-mono-nerd; do
     pacman -Q "$pkg" > /dev/null || {
         echo "❌ Verification failed for $pkg!"
         exit 1
