@@ -118,13 +118,13 @@ echo "🖌️ Installing JetBrains Mono Nerd Font..."
 if ! pacman -Q ttf-jetbrains-mono-nerd > /dev/null 2>&1; then
     echo "ttf-jetbrains-mono-nerd" >> "$STATE_DIR/installed_packages"
     sudo -u "$MAIN_USER" paru -S --noconfirm ttf-jetbrains-mono-nerd
-}
+fi
 
 # Step 6: Apply font to virtual console
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
 if [ -f /etc/vconsole.conf ]; then
     cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
-}
+fi
 echo "FONT=ter-v16n" > /etc/vconsole.conf
 mkfontscale /usr/share/fonts/terminus
 fc-cache -fv
@@ -135,7 +135,7 @@ mkdir -p "$USER_HOME/.config/xfce4/xfce4-terminal"
 chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4" "$USER_HOME/.config/xfce4/xfce4-terminal"
 if [ -f "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc" ]; then
     cp "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc" "$STATE_DIR/xfce4-terminal-config.bak"
-}
+fi
 cat << EOF > "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc"
 [Configuration]
 FontName=JetBrainsMono Nerd Font 12
@@ -154,7 +154,7 @@ if [ -f "/home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh" ]; then
 else
     echo "❌ Failed to find Nix environment script!"
     exit 1
-}
+fi
 
 # Step 10: Configure Nix with pinned Nixpkgs version
 echo "📝 Configuring Nix with pinned Nixpkgs version (25.05)..."
