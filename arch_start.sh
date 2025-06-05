@@ -111,7 +111,7 @@ if ! command -v paru > /dev/null; then
     cd "$USER_HOME"
     rm -rf paru
     touch "$STATE_DIR/paru_installed"
-}
+fi
 
 # Step 5: Install JetBrains Mono Nerd Font
 echo "🖌️ Installing JetBrains Mono Nerd Font..."
