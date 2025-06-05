@@ -60,7 +60,7 @@ pacman -Syu --noconfirm
 
 # Step 2: Check for existing packages to avoid unnecessary installs
 echo "🔍 Checking for existing packages..."
-pacman -Q base-devel git curl terminus-font nerd-fonts-fira-code > /dev/null 2>&1 && {
+pacman -Q base-devel git curl terminus-font fonts-jetbrains-mono > /dev/null 2>&1 && {
     echo "⚠️ Some packages already installed, skipping installation."
     exit 0
 }
@@ -87,8 +87,8 @@ fi
 
 # Step 5: Install FiraCode Nerd Font
 echo "🖌️ Installing FiraCode Nerd Font..."
-echo "nerd-fonts-fira-code" >> "$STATE_DIR/installed_packages"
-su paruuser -c "paru -S --noconfirm nerd-fonts-fira-code"
+echo "fonts-jetbrains-mono" >> "$STATE_DIR/installed_packages"
+su paruuser -c "paru -S --noconfirm fonts-jetbrains-mono"
 
 # Step 6: Apply font to virtual console
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
@@ -99,20 +99,20 @@ echo "FONT=ter-v16n" > /etc/vconsole.conf
 mkfontdir /usr/share/fonts/terminus
 fc-cache -fv
 
-# Step 7: Configure FiraCode Nerd Font for GUI terminals (example: xfce4-terminal)
-echo "⚙️ Configuring FiraCode Nerd Font for xfce4-terminal..."
+# Step 7: Configure fonts-jetbrains-mono Nerd Font for GUI terminals (example: xfce4-terminal)
+echo "⚙️ Configuring fonts-jetbrains-mono Nerd Font for xfce4-terminal..."
 mkdir -p ~/.config/xfce4/xfce4-terminal
 if [ -f ~/.config/xfce4/xfce4-terminal/terminalrc ]; then
     cp ~/.config/xfce4/xfce4-terminal/terminalrc "$STATE_DIR/xfce4-terminal-config.bak"
 fi
 cat << EOF > ~/.config/xfce4/xfce4-terminal/terminalrc
 [Configuration]
-FontName=FiraCode Nerd Font 12
+FontName=fonts-jetbrains-mono 12
 EOF
 
 # Step 8: Verify installations
 echo "✅ Verifying installed packages..."
-for pkg in git curl terminus-font nerd-fonts-fira-code; do
+for pkg in git curl terminus-font fonts-jetbrains-mono; do
     pacman -Q "$pkg" > /dev/null || {
         echo "❌ Verification failed for $pkg!"
         exit 1
@@ -124,5 +124,5 @@ userdel -r paruuser || echo "⚠️ Failed to remove paruuser, manual cleanup ma
 rm -f /etc/sudoers.d/paruuser
 rm -rf "$STATE_DIR"
 echo "🎉 Step 1 complete: System updated, base packages, and FiraCode Nerd Font installed! 🚀"
-echo "ℹ️ FiraCode Nerd Font applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'FiraCode Nerd Font' in their preferences."
+echo "ℹ️ fonts-jetbrains-mono applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'FiraCode Nerd Font' in their preferences."
 echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
