@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # Print a fun header 😎
-echo "🚀 Starting Arch Linux Setup: Step 1 - System Update, Base Packages & FiraCode Nerd Font 🚀"
+echo "🚀 Starting Arch Linux Setup: Step 1 - System Update, Base Packages & JetBrains Mono Nerd Font 🚀"
 
 # Directory to store temporary state for rollback
 STATE_DIR="/tmp/arch_setup_state"
@@ -27,7 +27,9 @@ cleanup() {
     if [ -f "$STATE_DIR/paru_installed" ]; then
         echo "🗑️ Removing paru..."
         rm -rf /tmp/paru
-        userdel -r paruuser || echo "⚠️ Failed to remove paruuser, manual cleanup may be needed."
+        if id paruuser &>/dev/null; then
+            userdel -r paruuser || echo "⚠️ Failed to remove paruuser, manual cleanup may be needed."
+        fi
         rm -f /etc/sudoers.d/paruuser
     fi
 
@@ -60,7 +62,7 @@ pacman -Syu --noconfirm
 
 # Step 2: Check for existing packages to avoid unnecessary installs
 echo "🔍 Checking for existing packages..."
-pacman -Q base-devel git curl terminus-font fonts-jetbrains-mono > /dev/null 2>&1 && {
+pacman -Q base-devel git curl terminus-font ttf-jetbrains-mono-nerd > /dev/null 2>&1 && {
     echo "⚠️ Some packages already installed, skipping installation."
     exit 0
 }
@@ -73,8 +75,10 @@ pacman -S --noconfirm base-devel git curl terminus-font
 # Step 4: Install paru (AUR helper) for Nerd Fonts
 echo "🛠️ Installing paru for AUR package management..."
 if ! command -v paru > /dev/null; then
-    useradd -m -s /bin/bash paruuser
+    # Create paruuser with proper fields
+    useradd -m -s /bin/bash -G wheel paruuser
     echo "paruuser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/paruuser
+    chmod 440 /etc/sudoers.d/paruuser
     cd /tmp
     git clone https://aur.archlinux.org/paru.git
     chown -R paruuser:paruuser paru
@@ -85,10 +89,10 @@ if ! command -v paru > /dev/null; then
     touch "$STATE_DIR/paru_installed"
 fi
 
-# Step 5: Install FiraCode Nerd Font
-echo "🖌️ Installing FiraCode Nerd Font..."
-echo "fonts-jetbrains-mono" >> "$STATE_DIR/installed_packages"
-su paruuser -c "paru -S --noconfirm fonts-jetbrains-mono"
+# Step 5: Install JetBrains Mono Nerd Font
+echo "🖌️ Installing JetBrains Mono Nerd Font..."
+echo "ttf-jetbrains-mono-nerd" >> "$STATE_DIR/installed_packages"
+su paruuser -c "paru -S --noconfirm ttf-jetbrains-mono-nerd"
 
 # Step 6: Apply font to virtual console
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
@@ -99,20 +103,20 @@ echo "FONT=ter-v16n" > /etc/vconsole.conf
 mkfontdir /usr/share/fonts/terminus
 fc-cache -fv
 
-# Step 7: Configure fonts-jetbrains-mono Nerd Font for GUI terminals (example: xfce4-terminal)
-echo "⚙️ Configuring fonts-jetbrains-mono Nerd Font for xfce4-terminal..."
+# Step 7: Configure JetBrains Mono Nerd Font for GUI terminals (example: xfce4-terminal)
+echo "⚙️ Configuring JetBrains Mono Nerd Font for xfce4-terminal..."
 mkdir -p ~/.config/xfce4/xfce4-terminal
 if [ -f ~/.config/xfce4/xfce4-terminal/terminalrc ]; then
     cp ~/.config/xfce4/xfce4-terminal/terminalrc "$STATE_DIR/xfce4-terminal-config.bak"
 fi
 cat << EOF > ~/.config/xfce4/xfce4-terminal/terminalrc
 [Configuration]
-FontName=fonts-jetbrains-mono 12
+FontName=JetBrainsMono Nerd Font 12
 EOF
 
 # Step 8: Verify installations
 echo "✅ Verifying installed packages..."
-for pkg in git curl terminus-font fonts-jetbrains-mono; do
+for pkg in git curl terminus-font ttf-jetbrains-mono-nerd; do
     pacman -Q "$pkg" > /dev/null || {
         echo "❌ Verification failed for $pkg!"
         exit 1
@@ -120,9 +124,11 @@ for pkg in git curl terminus-font fonts-jetbrains-mono; do
 done
 
 # Step 9: Clean up temporary user and state if successful
-userdel -r paruuser || echo "⚠️ Failed to remove paruuser, manual cleanup may be needed."
+if id paruuser &>/dev/null; then
+    userdel -r paruuser || echo "⚠️ Failed to remove paruuser, manual cleanup may be needed."
+fi
 rm -f /etc/sudoers.d/paruuser
 rm -rf "$STATE_DIR"
-echo "🎉 Step 1 complete: System updated, base packages, and FiraCode Nerd Font installed! 🚀"
-echo "ℹ️ fonts-jetbrains-mono applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'FiraCode Nerd Font' in their preferences."
+echo "🎉 Step 1 complete: System updated, base packages, and JetBrains Mono Nerd Font installed! 🚀"
+echo "ℹ️ JetBrains Mono Nerd Font applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font' in their preferences."
 echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
