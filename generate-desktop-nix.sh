@@ -19,17 +19,17 @@ echo "🚀 Generating desktop.nix with automated sha256 for $MAIN_USER 🚀"
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-# Function to fetch sha256 for a URL
+# Function to fetch sha256 for a URL (SRI format)
 fetch_sha256_url() {
     local url=$1
-    sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-url --type sha256 \"$url\"" 2>/dev/null
+    sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-url --type sha256 --print-sri \"$url\"" 2>/dev/null
 }
 
-# Function to fetch sha256 for a Git commit
+# Function to fetch sha256 for a Git commit (SRI format)
 fetch_sha256_git() {
     local repo=$1
     local rev=$2
-    sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-git --url \"$repo\" --rev \"$rev\" --quiet | grep sha256 | cut -d '\"' -f 4"
+    sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-git --url \"$repo\" --rev \"$rev\" --quiet | grep sha256 | cut -d '\"' -f 4 | nix hash to-sri --type sha256"
 }
 
 # Verify nix-prefetch-git is available
@@ -38,12 +38,18 @@ if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/prof
     exit 1
 fi
 
-# Fetch sha256 for Nixpkgs 25.05 tarball
+# Read stored Nixpkgs sha256 from setup-arch-step2-nix.sh
 NIXPKGS_URL="https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz"
-NIXPKGS_SHA256=$(fetch_sha256_url "$NIXPKGS_URL")
-if [ -z "$NIXPKGS_SHA256" ]; then
-    echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball!"
-    exit 1
+if [ -f "/home/$MAIN_USER/.config/nix/nixpkgs-sha256" ]; then
+    NIXPKGS_SHA256=$(cat "/home/$MAIN_USER/.config/nix/nixpkgs-sha256")
+else
+    NIXPKGS_SHA256=$(fetch_sha256_url "$NIXPKGS_URL")
+    if [ -z "$NIXPKGS_SHA256" ]; then
+        echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball!"
+        exit 1
+    fi
+    echo "$NIXPKGS_SHA256" > "/home/$MAIN_USER/.config/nix/nixpkgs-sha256"
+    chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix/nixpkgs-sha256"
 fi
 
 # Fetch sha256 for zsh-5.9

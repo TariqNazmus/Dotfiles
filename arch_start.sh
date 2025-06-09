@@ -175,7 +175,7 @@ if [ -f "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc" ]; then
 fi
 cat << EOF > "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc"
 [Configuration]
-FontName=JetBrainsMono Nerd Font 12
+FontName=JetBrainsMono Nerd Font Bold 14
 EOF
 chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc"
 

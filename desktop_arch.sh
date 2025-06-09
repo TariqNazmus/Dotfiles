@@ -63,7 +63,7 @@ cleanup() {
 
     if [ -f "$STATE_DIR/nix_profile_installed" ]; then
         echo "🗑️ Removing Nix profile..."
-        sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e sadat-desktop-envs" || echo "⚠️ Failed to remove Nix profile."
+        sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e sadat-desktop-env" || echo "⚠️ Failed to remove Nix profile."
     fi
 
     if [ -f "$STATE_DIR/nix_prefetch_scripts_installed" ]; then
@@ -77,7 +77,7 @@ cleanup() {
     fi
 
     rm -rf "$STATE_DIR"
-    echo "🔗 System restored to original state! 🎉"
+    echo "🔄 System restored to original state! 🎉"
     exit 1
 }
 
@@ -100,13 +100,21 @@ fi
 # Step 2: Verify Nix is installed
 echo "🔍 Verifying Nix installation..."
 progress_bar 2 "Checking Nix..."
-if [ ! -f "/home/$USER_HOME/.nix-profile/bin/nix" ]; then
+if [ ! -f "/home/$MAIN_USER/.nix-profile/bin/nix" ]; then
     echo "❌ Nix is not installed! Run setup-arch-step2-nix.sh first."
     exit 1
 fi
 source "/home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh"
 
-# Step 3: Install nix-prefetch-scripts
+# Step 3: Verify stored Nixpkgs sha256
+echo "🔍 Verifying stored Nixpkgs sha256..."
+progress_bar 2 "Checking Nixpkgs sha256..."
+if [ ! -f "/home/$MAIN_USER/.config/nix/nixpkgs-sha256" ]; then
+    echo "❌ Nixpkgs sha256 not found! Run setup-arch-step2-nix.sh first."
+    exit 1
+fi
+
+# Step 4: Install nix-prefetch-scripts
 echo "🛠️ Installing nix-prefetch-scripts for sha256 fetching..."
 progress_bar 5 "Installing nix-prefetch-scripts..."
 if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && command -v nix-prefetch-git" >/dev/null; then
@@ -114,7 +122,7 @@ if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/prof
     touch "$STATE_DIR/nix_prefetch_scripts_installed"
 fi
 
-# Step 4: Generate desktop configuration
+# Step 5: Generate desktop.nix with sha256 values
 echo "🛠️ Generating desktop.nix with automated sha256..."
 progress_bar 5 "Generating desktop.nix..."
 if [ -f "desktop.nix" ]; then
@@ -125,33 +133,33 @@ if ! sudo bash generate-desktop-nix.sh; then
     exit 1
 fi
 
-# Step 5: Install desktop environment from desktop.nix
-echo "🖥️ Installing desktop environment from desktop.nix..."
+# Step 6: Install desktop environment from desktop.nix
+echo "🛠️ Installing desktop environment from desktop.nix..."
 progress_bar 10 "Installing desktop environment..."
 sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -f desktop.nix -iA environment"
 touch "$STATE_DIR/nix_profile_installed"
 
-# Step 6: Set zsh as default shell
+# Step 7: Set zsh as default shell
 echo "⚙️ Setting zsh as default shell for $MAIN_USER..."
 progress_bar 5 "Configuring zsh..."
 ZSH_PATH="/home/$MAIN_USER/.nix-profile/bin/zsh"
 if [ ! -f "$ZSH_PATH" ]; then
-    echo "❌ zsh not found at $ZSH_PATH$!"
+    echo "❌ zsh not found at $ZSH_PATH!"
     exit 1
 fi
 cp /etc/passwd "$STATE_DIR/passwd.bak"
 chsh -s "$ZSH_PATH" "$MAIN_USER"
 
-# Step 7: Configure .zshrc
+# Step 8: Configure .zshrc
 echo "⚙️ Configuring .zshrc for $MAIN_USER..."
 progress_bar 5 "Configuring .zshrc..."
-if [ -f "/home/$USER_HOME/.zshrc" ]; then
-    cp "/home/$USER_HOME/.zshrc" "$STATE_DIR/zshrc.bak"
+if [ -f "/home/$MAIN_USER/.zshrc" ]; then
+    cp "/home/$MAIN_USER/.zshrc" "$STATE_DIR/zshrc.bak"
 fi
 cat << EOF > "/home/$MAIN_USER/.zshrc"
 # Source Nix environment
 if [ -f ~/.nix-profile/etc/profile.d/nix.sh ]; then
-    source ~/.nix-profile/etc/nix.sh/nix.sh
+    source ~/.nix-profile/etc/profile.d/nix.sh
 fi
 
 # Oh My Zsh configuration
@@ -161,13 +169,13 @@ plugins=(git)
 source \$ZSH/oh-my-zsh.sh
 
 # Basic settings
-export PATH=$HOME/.nix-profile/bin:$PATH
+export PATH=\$HOME/.nix-profile/bin:\$PATH
 alias ls='ls --color=auto'
 alias ll='ls -l'
 EOF
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.zshrc"
 
-# Step 8: Verify configuration
+# Step 9: Verify configuration
 echo "✅ Verifying configuration..."
 progress_bar 5 "Verifying configuration..."
 if ! sudo -u "$MAIN_USER" "$ZSH_PATH" --version | grep -q "5.9"; then
@@ -179,7 +187,7 @@ if ! grep -q "$ZSH_PATH" /etc/passwd; then
     exit 1
 fi
 
-# Step 9: Clean up state if successful
+# Step 10: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 3 complete: Desktop environment with pinned zsh (5.9) configured! 🚀"
 echo "ℹ️ zsh is now the default shell for $MAIN_USER. Log out and log in to use it."
