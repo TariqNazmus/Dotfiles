@@ -38,6 +38,14 @@ if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/prof
     exit 1
 fi
 
+# Fetch sha256 for Nixpkgs 25.05 tarball
+NIXPKGS_URL="https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz"
+NIXPKGS_SHA256=$(fetch_sha256_url "$NIXPKGS_URL")
+if [ -z "$NIXPKGS_SHA256" ]; then
+    echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball!"
+    exit 1
+fi
+
 # Fetch sha256 for zsh-5.9
 ZSH_URL="https://sourceforge.net/projects/zsh/files/zsh/5.9/zsh-5.9.tar.xz"
 ZSH_SHA256=$(fetch_sha256_url "$ZSH_URL")
@@ -48,7 +56,7 @@ fi
 
 # Fetch sha256 for oh-my-zsh (commit from Nixpkgs 25.05)
 OHMYZSH_REPO="https://github.com/ohmyzsh/ohmyzsh"
-OHMYZSH_REV="3ff8c7e"
+OHMYZSH_REV="a3f37b8" # Placeholder, replace with Nixpkgs 25.05 commit
 OHMYZSH_SHA256=$(fetch_sha256_git "$OHMYZSH_REPO" "$OHMYZSH_REV")
 if [ -z "$OHMYZSH_SHA256" ]; then
     echo "❌ Failed to fetch sha256 for oh-my-zsh commit $OHMYZSH_REV!"
@@ -60,8 +68,8 @@ cat << EOF > desktop.nix
 {
   # Pin Nixpkgs to 25.05 for reproducibility
   nixpkgs ? import (fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz";
-    sha256 = "sha256-v/HdrU2OvqAtMA9DWFni9XzJHLdJ02z2S2AfJanvmkI=";
+    url = "$NIXPKGS_URL";
+    sha256 = "$NIXPKGS_SHA256";
   }) {}
 }:
 

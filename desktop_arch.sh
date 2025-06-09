@@ -63,7 +63,7 @@ cleanup() {
 
     if [ -f "$STATE_DIR/nix_profile_installed" ]; then
         echo "🗑️ Removing Nix profile..."
-        sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e sadat-desktop-env" || echo "⚠️ Failed to remove Nix profile."
+        sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e sadat-desktop-envs" || echo "⚠️ Failed to remove Nix profile."
     fi
 
     if [ -f "$STATE_DIR/nix_prefetch_scripts_installed" ]; then
@@ -77,7 +77,7 @@ cleanup() {
     fi
 
     rm -rf "$STATE_DIR"
-    echo "🔄 System restored to original state! 🎉"
+    echo "🔗 System restored to original state! 🎉"
     exit 1
 }
 
@@ -100,7 +100,7 @@ fi
 # Step 2: Verify Nix is installed
 echo "🔍 Verifying Nix installation..."
 progress_bar 2 "Checking Nix..."
-if [ ! -f "/home/$MAIN_USER/.nix-profile/bin/nix" ]; then
+if [ ! -f "/home/$USER_HOME/.nix-profile/bin/nix" ]; then
     echo "❌ Nix is not installed! Run setup-arch-step2-nix.sh first."
     exit 1
 fi
@@ -114,7 +114,7 @@ if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/prof
     touch "$STATE_DIR/nix_prefetch_scripts_installed"
 fi
 
-# Step 4: Generate desktop.nix with sha256 values
+# Step 4: Generate desktop configuration
 echo "🛠️ Generating desktop.nix with automated sha256..."
 progress_bar 5 "Generating desktop.nix..."
 if [ -f "desktop.nix" ]; then
@@ -126,7 +126,7 @@ if ! sudo bash generate-desktop-nix.sh; then
 fi
 
 # Step 5: Install desktop environment from desktop.nix
-echo "🛠️ Installing desktop environment from desktop.nix..."
+echo "🖥️ Installing desktop environment from desktop.nix..."
 progress_bar 10 "Installing desktop environment..."
 sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -f desktop.nix -iA environment"
 touch "$STATE_DIR/nix_profile_installed"
@@ -136,7 +136,7 @@ echo "⚙️ Setting zsh as default shell for $MAIN_USER..."
 progress_bar 5 "Configuring zsh..."
 ZSH_PATH="/home/$MAIN_USER/.nix-profile/bin/zsh"
 if [ ! -f "$ZSH_PATH" ]; then
-    echo "❌ zsh not found at $ZSH_PATH!"
+    echo "❌ zsh not found at $ZSH_PATH$!"
     exit 1
 fi
 cp /etc/passwd "$STATE_DIR/passwd.bak"
@@ -145,13 +145,13 @@ chsh -s "$ZSH_PATH" "$MAIN_USER"
 # Step 7: Configure .zshrc
 echo "⚙️ Configuring .zshrc for $MAIN_USER..."
 progress_bar 5 "Configuring .zshrc..."
-if [ -f "/home/$MAIN_USER/.zshrc" ]; then
-    cp "/home/$MAIN_USER/.zshrc" "$STATE_DIR/zshrc.bak"
+if [ -f "/home/$USER_HOME/.zshrc" ]; then
+    cp "/home/$USER_HOME/.zshrc" "$STATE_DIR/zshrc.bak"
 fi
 cat << EOF > "/home/$MAIN_USER/.zshrc"
 # Source Nix environment
 if [ -f ~/.nix-profile/etc/profile.d/nix.sh ]; then
-    source ~/.nix-profile/etc/profile.d/nix.sh
+    source ~/.nix-profile/etc/nix.sh/nix.sh
 fi
 
 # Oh My Zsh configuration
@@ -161,7 +161,7 @@ plugins=(git)
 source \$ZSH/oh-my-zsh.sh
 
 # Basic settings
-export PATH=\$HOME/.nix-profile/bin:\$PATH
+export PATH=$HOME/.nix-profile/bin:$PATH
 alias ls='ls --color=auto'
 alias ll='ls -l'
 EOF
