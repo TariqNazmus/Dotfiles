@@ -66,6 +66,16 @@ cleanup() {
         sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e sadat-desktop-env" || echo "⚠️ Failed to remove Nix profile."
     fi
 
+    if [ -f "$STATE_DIR/nix_prefetch_scripts_installed" ]; then
+        echo "🗑️ Removing nix-prefetch-scripts..."
+        sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -e nix-prefetch-scripts" || echo "⚠️ Failed to remove nix-prefetch-scripts."
+    fi
+
+    if [ -f "$STATE_DIR/desktop_nix.bak" ]; then
+        echo "🔄 Restoring original desktop.nix..."
+        mv "$STATE_DIR/desktop_nix.bak" desktop.nix || echo "⚠️ Failed to restore desktop.nix."
+    fi
+
     rm -rf "$STATE_DIR"
     echo "🔄 System restored to original state! 🎉"
     exit 1
@@ -96,21 +106,32 @@ if [ ! -f "/home/$MAIN_USER/.nix-profile/bin/nix" ]; then
 fi
 source "/home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh"
 
-# Step 3: Check for desktop.nix
-echo "🔍 Checking for desktop.nix..."
-progress_bar 2 "Checking configuration..."
-if [ ! -f "desktop.nix" ]; then
-    echo "❌ desktop.nix not found in current directory!"
+# Step 3: Install nix-prefetch-scripts
+echo "🛠️ Installing nix-prefetch-scripts for sha256 fetching..."
+progress_bar 5 "Installing nix-prefetch-scripts..."
+if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && command -v nix-prefetch-git" >/dev/null; then
+    sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -iA nixpkgs.nix-prefetch-scripts"
+    touch "$STATE_DIR/nix_prefetch_scripts_installed"
+fi
+
+# Step 4: Generate desktop.nix with sha256 values
+echo "🛠️ Generating desktop.nix with automated sha256..."
+progress_bar 5 "Generating desktop.nix..."
+if [ -f "desktop.nix" ]; then
+    cp desktop.nix "$STATE_DIR/desktop_nix.bak"
+fi
+if ! sudo bash generate-desktop-nix.sh; then
+    echo "❌ Failed to generate desktop.nix!"
     exit 1
 fi
 
-# Step 4: Install desktop environment from desktop.nix
+# Step 5: Install desktop environment from desktop.nix
 echo "🛠️ Installing desktop environment from desktop.nix..."
 progress_bar 10 "Installing desktop environment..."
 sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-env -f desktop.nix -iA environment"
 touch "$STATE_DIR/nix_profile_installed"
 
-# Step 5: Set zsh as default shell
+# Step 6: Set zsh as default shell
 echo "⚙️ Setting zsh as default shell for $MAIN_USER..."
 progress_bar 5 "Configuring zsh..."
 ZSH_PATH="/home/$MAIN_USER/.nix-profile/bin/zsh"
@@ -121,7 +142,7 @@ fi
 cp /etc/passwd "$STATE_DIR/passwd.bak"
 chsh -s "$ZSH_PATH" "$MAIN_USER"
 
-# Step 6: Configure .zshrc
+# Step 7: Configure .zshrc
 echo "⚙️ Configuring .zshrc for $MAIN_USER..."
 progress_bar 5 "Configuring .zshrc..."
 if [ -f "/home/$MAIN_USER/.zshrc" ]; then
@@ -146,7 +167,7 @@ alias ll='ls -l'
 EOF
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.zshrc"
 
-# Step 7: Verify configuration
+# Step 8: Verify configuration
 echo "✅ Verifying configuration..."
 progress_bar 5 "Verifying configuration..."
 if ! sudo -u "$MAIN_USER" "$ZSH_PATH" --version | grep -q "5.9"; then
@@ -158,7 +179,7 @@ if ! grep -q "$ZSH_PATH" /etc/passwd; then
     exit 1
 fi
 
-# Step 8: Clean up state if successful
+# Step 9: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 3 complete: Desktop environment with pinned zsh (5.9) configured! 🚀"
 echo "ℹ️ zsh is now the default shell for $MAIN_USER. Log out and log in to use it."

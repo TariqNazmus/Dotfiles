@@ -32,6 +32,12 @@ fetch_sha256_git() {
     sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-git --url \"$repo\" --rev \"$rev\" --quiet | grep sha256 | cut -d '\"' -f 4"
 }
 
+# Verify nix-prefetch-git is available
+if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && command -v nix-prefetch-git" >/dev/null; then
+    echo "❌ nix-prefetch-git not found! Ensure nix-prefetch-scripts is installed."
+    exit 1
+fi
+
 # Fetch sha256 for zsh-5.9
 ZSH_URL="https://sourceforge.net/projects/zsh/files/zsh/5.9/zsh-5.9.tar.xz"
 ZSH_SHA256=$(fetch_sha256_url "$ZSH_URL")
@@ -40,12 +46,12 @@ if [ -z "$ZSH_SHA256" ]; then
     exit 1
 fi
 
-# Fetch sha256 for oh-my-zsh (use commit from Nixpkgs 25.05, e.g., a stable commit)
+# Fetch sha256 for oh-my-zsh (commit from Nixpkgs 25.05)
 OHMYZSH_REPO="https://github.com/ohmyzsh/ohmyzsh"
-OHMYZSH_REV="d3e7036e9d6b6f8b0a5b7743b0c741c0a9b0a4b0" # Example commit, replace with Nixpkgs 25.05 commit
+OHMYZSH_REV="3ff8c7e"
 OHMYZSH_SHA256=$(fetch_sha256_git "$OHMYZSH_REPO" "$OHMYZSH_REV")
 if [ -z "$OHMYZSH_SHA256" ]; then
-    echo "❌ Failed to fetch sha256 for oh-my-zsh!"
+    echo "❌ Failed to fetch sha256 for oh-my-zsh commit $OHMYZSH_REV!"
     exit 1
 fi
 
