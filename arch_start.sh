@@ -218,8 +218,16 @@ trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDS
 EOF
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix/nix.conf"
 
-# Pin Nixpkgs to 25.05
-sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --add https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz nixpkgs"
+# Fetch sha256 for Nixpkgs 25.05 tarball
+NIXPKGS_URL="https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz"
+NIXPKGS_SHA256=$(sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-url --type sha256 \"$NIXPKGS_URL\"" 2>/dev/null)
+if [ -z "$NIXPKGS_SHA256" ]; then
+    echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball!"
+    exit 1
+fi
+
+# Pin Nixpkgs to 25.05 with verified sha256
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --add \"$NIXPKGS_URL\" nixpkgs"
 sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --update"
 
 # Step 12: Verify Nix configuration
@@ -234,6 +242,12 @@ if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/prof
     exit 1
 fi
 
+# Step 13: Clean up state if successful
+rm -rf "$STATE_DIR"
+echo "🎉 Step 2 complete: Nix package manager installed and configured with Nixpkgs 25.05! 🚀"
+echo "ℹ️ JetBrains Mono Nerd Font applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font' in their preferences."
+echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
+echo "ℹ️ Nix is set up with Nixpkgs 25.05. Source ~/.nix-profile/etc/profile.d/nix.sh in your shell or restart your session to use Nix."
 # Step 13: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 2 complete: Nix package manager installed and configured with Nixpkgs 25.05! 🚀"
