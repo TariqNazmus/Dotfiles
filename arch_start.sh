@@ -196,6 +196,10 @@ if [ ! -f "/home/$MAIN_USER/.nix-profile/bin/nix" ]; then
     echo "❌ Nix binary not found in user profile!"
     exit 1
 fi
+if ! sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && command -v nix-prefetch-url" >/dev/null; then
+    echo "❌ nix-prefetch-url not found in Nix profile!"
+    exit 1
+fi
 
 # Step 10: Source Nix environment for the current session
 echo "🔧 Sourcing Nix environment..."
@@ -219,19 +223,40 @@ trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDS
 EOF
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix/nix.conf"
 
-# Fetch sha256 for Nixpkgs 25.05 tarball
+# Fetch sha256 for Nixpkgs 25.05 tarball with retries
 NIXPKGS_URL="https://github.com/NixOS/nixpkgs/archive/25.05.tar.gz"
-NIXPKGS_SHA256=$(sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-url --type sha256 --print-sri \"$NIXPKGS_URL\"" 2>/dev/null)
+NIXPKGS_SHA256=""
+for attempt in {1..3}; do
+    echo "🔍 Attempt $attempt to fetch sha256 for Nixpkgs 25.05..."
+    NIXPKGS_SHA256=$(sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-prefetch-url --type sha256 --print-sri \"$NIXPKGS_URL\"" 2>"$STATE_DIR/nix-prefetch-error.log")
+    if [ -n "$NIXPKGS_SHA256" ]; then
+        break
+    fi
+    echo "⚠️ Failed to fetch sha256 on attempt $attempt. Retrying in 5 seconds..."
+    cat "$STATE_DIR/nix-prefetch-error.log"
+    sleep 5
+done
 if [ -z "$NIXPKGS_SHA256" ]; then
-    echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball!"
+    echo "❌ Failed to fetch sha256 for Nixpkgs 25.05 tarball after 3 attempts!"
+    cat "$STATE_DIR/nix-prefetch-error.log"
     exit 1
 fi
 echo "$NIXPKGS_SHA256" > "/home/$MAIN_USER/.config/nix/nixpkgs-sha256"
 chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.config/nix/nixpkgs-sha256"
 
 # Pin Nixpkgs to 25.05
-sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --add \"$NIXPKGS_URL\" nixpkgs"
-sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --update"
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --add \"$NIXPKGS_URL\" nixpkgs" 2>"$STATE_DIR/nix-channel-error.log"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to add Nixpkgs channel!"
+    cat "$STATE_DIR/nix-channel-error.log"
+    exit 1
+fi
+sudo -u "$MAIN_USER" bash -c "source /home/$MAIN_USER/.nix-profile/etc/profile.d/nix.sh && nix-channel --update" 2>"$STATE_DIR/nix-channel-update-error.log"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to update Nixpkgs channel!"
+    cat "$STATE_DIR/nix-channel-update-error.log"
+    exit 1
+fi
 
 # Step 12: Verify Nix configuration
 echo "✅ Verifying Nix configuration..."
@@ -248,6 +273,6 @@ fi
 # Step 13: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 2 complete: Nix package manager installed and configured with Nixpkgs 25.05! 🚀"
-echo "ℹ️ JetBrains Mono Nerd Font applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font' in their preferences."
+echo "ℹ️ JetBrains Mono Nerd Font (Bold, size 14) applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font Bold' in their preferences."
 echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
 echo "ℹ️ Nix is set up with Nixpkgs 25.05. Source ~/.nix-profile/etc/profile.d/nix.sh in your shell or restart your session to use Nix."
