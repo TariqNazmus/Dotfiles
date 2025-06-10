@@ -24,6 +24,11 @@ AUR_PKGS_DIR="/home/$MAIN_USER/.aur_pkgs"
 mkdir -p "$AUR_PKGS_DIR"
 chown "$MAIN_USER:$MAIN_USER" "$AUR_PKGS_DIR"
 
+# Log file for makepkg errors
+MAKEPKG_LOG="$STATE_DIR/makepkg_errors.log"
+touch "$MAKEPKG_LOG"
+chown "$MAIN_USER:$MAIN_USER" "$MAKEPKG_LOG"
+
 # Progress bar function
 progress_bar() {
     local duration=$1
@@ -97,6 +102,11 @@ cleanup() {
         mv "$STATE_DIR/pacman.conf.bak" /etc/pacman.conf || echo "⚠️ Failed to restore pacman.conf."
     fi
 
+    if [ -s "$MAKEPKG_LOG" ]; then
+        echo "📜 Makepkg errors logged in $MAKEPKG_LOG:"
+        cat "$MAKEPKG_LOG"
+    fi
+
     rm -rf "$STATE_DIR"
     echo "🔄 System restored to original state! 🎉"
     exit 1
@@ -140,7 +150,7 @@ if ! command -v paru > /dev/null; then
     cd "$USER_HOME"
     sudo -u "$MAIN_USER" git clone https://aur.archlinux.org/paru.git
     cd paru
-    sudo -u "$MAIN_USER" makepkg -si --noconfirm
+    sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1
     cd "$USER_HOME"
     rm -rf paru
     touch "$STATE_DIR/paru_installed"
@@ -151,7 +161,7 @@ echo "🖌️ Installing JetBrains Mono Nerd Font..."
 if ! pacman -Q ttf-jetbrains-mono-nerd > /dev/null 2>&1; then
     progress_bar 10 "Installing JetBrains Mono Nerd Font..."
     echo "ttf-jetbrains-mono-nerd" >> "$STATE_DIR/installed_packages"
-    sudo -u "$MAIN_USER" paru -S --noconfirm ttf-jetbrains-mono-nerd
+    sudo -u "$MAIN_USER" paru -S --noconfirm ttf-jetbrains-mono-nerd >> "$MAKEPKG_LOG" 2>&1
 fi
 
 # Step 6: Create custom PKGBUILD for zsh-5.9
@@ -194,18 +204,27 @@ echo "🛠️ Installing zsh-5.9 from custom PKGBUILD..."
 if ! pacman -Q zsh > /dev/null 2>&1 || ! /usr/bin/zsh --version | grep -q "5.9"; then
     progress_bar 15 "Installing zsh-5.9..."
     cd "$AUR_PKGS_DIR/zsh"
-    sudo -u "$MAIN_USER" makepkg -si --noconfirm
+    if ! sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1; then
+        echo "❌ zsh-5.9 installation failed! Checking SHA256..."
+        if [ -f "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" ]; then
+            ACTUAL_SHA256=$(sha256sum "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" | awk '{print $1}')
+            echo "📜 Expected SHA256: 9b8d40a5b255d1efced7a5937e9f1a3f36f0ccad37d93f48c22b5b5a5c092a91" >> "$MAKEPKG_LOG"
+            echo "📜 Actual SHA256: $ACTUAL_SHA256" >> "$MAKEPKG_LOG"
+            echo "ℹ️ Update the sha256sums in $AUR_PKGS_DIR/zsh/PKGBUILD with the actual hash."
+        fi
+        exit 1
+    fi
     echo "zsh" >> "$STATE_DIR/installed_packages"
 fi
 ZSH_PATH="/usr/bin/zsh"
 
 # Step 8: Create custom PKGBUILD for oh-my-zsh
-echo "🛠️ Creating custom PKGBUILD for oh-my-zsh (pinned commit)..."
+echo "🛠️ Creating custom PKGBUILD for oh-my-zsh (commit 3ff8c7e)..."
 progress_bar 5 "Creating oh-my-zsh PKGBUILD..."
 mkdir -p "$AUR_PKGS_DIR/oh-my-zsh"
 cat << EOF > "$AUR_PKGS_DIR/oh-my-zsh/PKGBUILD"
 pkgname=oh-my-zsh-git
-pkgver=r7302.a3f37b8
+pkgver=r7302.3ff8c7e
 pkgrel=1
 pkgdesc="A community-driven framework for managing your zsh configuration"
 arch=('any')
@@ -215,7 +234,6 @@ depends=('zsh')
 makedepends=('git')
 source=("git+https://github.com/ohmyzsh/ohmyzsh.git#commit=3ff8c7e")
 sha256sums=('SKIP')
-options=('!strip')
 
 package() {
   mkdir -p "\$pkgdir/usr/share/oh-my-zsh"
@@ -230,7 +248,7 @@ echo "🛠️ Installing oh-my-zsh from custom PKGBUILD..."
 if ! pacman -Q oh-my-zsh-git > /dev/null 2>&1; then
     progress_bar 10 "Installing oh-my-zsh..."
     cd "$AUR_PKGS_DIR/oh-my-zsh"
-    sudo -u "$MAIN_USER" makepkg -si --noconfirm
+    sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1
     echo "oh-my-zsh-git" >> "$STATE_DIR/installed_packages"
 fi
 
@@ -299,9 +317,13 @@ chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.zshrc"
 # Step 15: Verify configuration
 echo "✅ Verifying configuration..."
 progress_bar 5 "Verifying configuration..."
-if ! "$ZSH_PATH" --version >/dev/tty | grep -q "5.9"; then
-  echo "❌ zsh version verification failed! Expected 5.9."
-  exit 1
+if ! "$ZSH_PATH" --version >/dev/null 2>&1; then
+    echo "❌ zsh binary not executable!"
+    exit 1
+fi
+if ! "$ZSH_PATH" --version | grep -q "5.9"; then
+    echo "❌ zsh version verification failed! Expected 5.9."
+    exit 1
 fi
 if ! grep -q "$ZSH_PATH" /etc/passwd; then
     echo "❌ zsh not set as default shell!"
@@ -314,7 +336,7 @@ fi
 
 # Step 16: Clean up state if successful
 rm -rf "$STATE_DIR"
-echo "🎉 Step 2 complete: Zsh 5.9 and oh-my-zsh (pinned) with fonts installed and configured! 🚀"
+echo "🎉 Step 2 complete: Zsh 5.9 and oh-my-zsh (commit 3ff8c7e) with fonts installed and configured! 🚀"
 echo "ℹ️ JetBrains Mono Nerd Font (Bold, size 14) applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font Bold' in their preferences."
 echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
 echo "ℹ️ zsh is now the default shell for $MAIN_USER. Log out and log in to use it."
