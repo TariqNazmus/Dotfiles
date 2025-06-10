@@ -178,7 +178,7 @@ url="https://www.zsh.org/"
 license=('custom')
 depends=('pcre' 'libcap' 'gdbm')
 source=("https://sourceforge.net/projects/zsh/files/zsh/\$pkgver/zsh-\$pkgver.tar.xz")
-sha256sums=('9b8d40a5b255d1efced7a5937e9f1a3f36f0ccad37d93f48c22b5b5a5c092a91')
+sha256sums=('9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5')
 
 build() {
   cd "\$srcdir/zsh-\$pkgver"
@@ -205,12 +205,16 @@ if ! pacman -Q zsh > /dev/null 2>&1 || ! /usr/bin/zsh --version | grep -q "5.9";
     progress_bar 15 "Installing zsh-5.9..."
     cd "$AUR_PKGS_DIR/zsh"
     if ! sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1; then
-        echo "❌ zsh-5.9 installation failed! Checking SHA256..."
+        echo "❌ zsh-5.9 installation failed! Checking for downloaded source..." >> "$MAKEPKG_LOG"
         if [ -f "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" ]; then
             ACTUAL_SHA256=$(sha256sum "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" | awk '{print $1}')
-            echo "📜 Expected SHA256: 9b8d40a5b255d1efced7a5937e9f1a3f36f0ccad37d93f48c22b5b5a5c092a91" >> "$MAKEPKG_LOG"
+            echo "📜 Expected SHA256: 9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5" >> "$MAKEPKG_LOG"
             echo "📜 Actual SHA256: $ACTUAL_SHA256" >> "$MAKEPKG_LOG"
-            echo "ℹ️ Update the sha256sums in $AUR_PKGS_DIR/zsh/PKGBUILD with the actual hash."
+            echo "ℹ️ Update the sha256sums in $AUR_PKGS_DIR/zsh/PKGBUILD with the actual hash." >> "$MAKEPKG_LOG"
+        else
+            echo "⚠️ Source file zsh-5.9.tar.xz not found in $AUR_PKGS_DIR/zsh/src/" >> "$MAKEPKG_LOG"
+            echo "ℹ️ Try downloading manually: curl -L -o zsh-5.9.tar.xz https://sourceforge.net/projects/zsh/files/zsh/5.9/zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
+            echo "ℹ️ Compute SHA256: sha256sum zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
         fi
         exit 1
     fi
@@ -248,7 +252,10 @@ echo "🛠️ Installing oh-my-zsh from custom PKGBUILD..."
 if ! pacman -Q oh-my-zsh-git > /dev/null 2>&1; then
     progress_bar 10 "Installing oh-my-zsh..."
     cd "$AUR_PKGS_DIR/oh-my-zsh"
-    sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1
+    if ! sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1; then
+        echo "❌ oh-my-zsh installation failed! Check $MAKEPKG_LOG for details." >> "$MAKEPKG_LOG"
+        exit 1
+    fi
     echo "oh-my-zsh-git" >> "$STATE_DIR/installed_packages"
 fi
 
@@ -286,7 +293,7 @@ chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4/xfce4-terminal/terminalr
 
 # Step 13: Set zsh as default shell
 echo "⚙️ Setting zsh as default shell for $MAIN_USER..."
-progress_bar 5 "Configuring zsh..."
+progress_bar 5 "Configuring shell..."
 if [ ! -f "$ZSH_PATH" ]; then
     echo "❌ zsh not found at $ZSH_PATH!"
     exit 1
@@ -305,10 +312,10 @@ cat << EOF > "/home/$MAIN_USER/.zshrc"
 export ZSH="/usr/share/oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git)
-source \$ZSH/oh-my-zsh.sh
+source "$ZSH/oh-my-zsh.sh"
 
 # Basic settings
-export PATH=\$HOME/bin:/usr/local/bin:\$PATH
+export PATH="$HOME/bin:/usr/local/bin:$PATH"
 alias ls='ls --color=auto'
 alias ll='ls -l'
 EOF
@@ -322,7 +329,7 @@ if ! "$ZSH_PATH" --version >/dev/null 2>&1; then
     exit 1
 fi
 if ! "$ZSH_PATH" --version | grep -q "5.9"; then
-    echo "❌ zsh version verification failed! Expected 5.9."
+    echo "❌ zsh version verification failed! expected 5.9"
     exit 1
 fi
 if ! grep -q "$ZSH_PATH" /etc/passwd; then
@@ -337,8 +344,8 @@ fi
 # Step 16: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 2 complete: Zsh 5.9 and oh-my-zsh (commit 3ff8c7e) with fonts installed and configured! 🚀"
-echo "ℹ️ JetBrains Mono Nerd Font (Bold, size 14) applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font Bold' in their preferences."
-echo "ℹ️ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
-echo "ℹ️ zsh is now the default shell for $MAIN_USER. Log out and log in to use it."
-echo "ℹ️ Custom PKGBUILDs stored in $AUR_PKGS_DIR for reproducibility."
-echo "ℹ️ zsh and oh-my-zsh updates are prevented via /etc/pacman.conf. Remove 'IgnorePkg' to allow updates."
+echo "ℹ JetBrains Mono Nerd Font (Bold, size 14) applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font Bold' in their preferences."
+echo "ℹ Virtual console uses Terminus font (ter-v16n) as Nerd Fonts are not supported in vconsole."
+echo "ℹ zsh is now the default shell for $MAIN_USER. Log out and log in to use it."
+echo "ℹ Packages stored in $AUR_PKGS_DIR for reproducibility."
+echo "ℹ zsh and oh-my-zsh updates are prevented via /etc/pacman.conf. Remove 'IgnorePkg' to allow updates."
