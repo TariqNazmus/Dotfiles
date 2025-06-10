@@ -24,7 +24,7 @@ AUR_PKGS_DIR="/home/$MAIN_USER/.aur_pkgs"
 mkdir -p "$AUR_PKGS_DIR"
 chown "$MAIN_USER:$MAIN_USER" "$AUR_PKGS_DIR"
 
-# Log file for makepkg errors
+# Log file for makepkg and sudo errors
 MAKEPKG_LOG="$STATE_DIR/makepkg_errors.log"
 touch "$MAKEPKG_LOG"
 chown "$MAIN_USER:$MAIN_USER" "$MAKEPKG_LOG"
@@ -102,8 +102,15 @@ cleanup() {
         mv "$STATE_DIR/pacman.conf.bak" /etc/pacman.conf || echo "⚠️ Failed to restore pacman.conf."
     fi
 
+    if [ -f "$STATE_DIR/sudoers.bak" ]; then
+        echo "🔄 Restoring original sudoers configuration..."
+        mv "$STATE_DIR/sudoers.bak" "/etc/sudoers.d/99-$MAIN_USER" || echo "⚠️ Failed to restore sudoers."
+    elif [ -f "/etc/sudoers.d/99-$MAIN_USER" ]; then
+        rm -f "/etc/sudoers.d/99-$MAIN_USER"
+    fi
+
     if [ -s "$MAKEPKG_LOG" ]; then
-        echo "📜 Makepkg errors logged in $MAKEPKG_LOG:"
+        echo "📜 Errors logged in $MAKEPKG_LOG:"
         cat "$MAKEPKG_LOG"
     fi
 
@@ -128,12 +135,21 @@ if [ ! -d "$USER_HOME" ]; then
     exit 1
 fi
 
-# Step 2: Update Arch system
+# Step 2: Configure passwordless sudo for $MAIN_USER
+echo "🔒 Configuring temporary passwordless sudo for $MAIN_USER..."
+progress_bar 5 "Configuring sudo..."
+if [ ! -f "/etc/sudoers.d/99-$MAIN_USER" ]; then
+    echo "$MAIN_USER ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/99-$MAIN_USER"
+    chmod 440 "/etc/sudoers.d/99-$MAIN_USER"
+    cp "/etc/sudoers.d/99-$MAIN_USER" "$STATE_DIR/sudoers.bak"
+fi
+
+# Step 3: Update Arch system
 echo "🔄 Updating Arch system..."
 progress_bar 10 "Updating system..."
 pacman -Syu --noconfirm
 
-# Step 3: Install base packages
+# Step 4: Install base packages
 echo "📦 Installing base packages..."
 progress_bar 10 "Installing base packages..."
 if pacman -Q base-devel git curl terminus-font xorg-mkfontscale > /dev/null 2>&1; then
@@ -143,20 +159,26 @@ else
     pacman -S --noconfirm base-devel git curl terminus-font xorg-mkfontscale
 fi
 
-# Step 4: Install paru (AUR helper)
+# Step 5: Install paru (AUR helper)
 echo "🛠️ Installing paru for AUR package management..."
 if ! command -v paru > /dev/null; then
     progress_bar 10 "Installing paru..."
     cd "$USER_HOME"
     sudo -u "$MAIN_USER" git clone https://aur.archlinux.org/paru.git
     cd paru
-    sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1
+    sudo -u "$MAIN_USER" makepkg -s --noconfirm >> "$MAKEPKG_LOG" 2>&1
+    if ls *.pkg.tar.zst > /dev/null 2>&1; then
+        pacman -U --noconfirm *.pkg.tar.zst >> "$MAKEPKG_LOG" 2>&1
+    else
+        echo "❌ No paru package built! Check $MAKEPKG_LOG for errors." >> "$MAKEPKG_LOG"
+        exit 1
+    fi
     cd "$USER_HOME"
     rm -rf paru
     touch "$STATE_DIR/paru_installed"
 fi
 
-# Step 5: Install JetBrains Mono Nerd Font
+# Step 6: Install JetBrains Mono Nerd Font
 echo "🖌️ Installing JetBrains Mono Nerd Font..."
 if ! pacman -Q ttf-jetbrains-mono-nerd > /dev/null 2>&1; then
     progress_bar 10 "Installing JetBrains Mono Nerd Font..."
@@ -164,7 +186,7 @@ if ! pacman -Q ttf-jetbrains-mono-nerd > /dev/null 2>&1; then
     sudo -u "$MAIN_USER" paru -S --noconfirm ttf-jetbrains-mono-nerd >> "$MAKEPKG_LOG" 2>&1
 fi
 
-# Step 6: Create custom PKGBUILD for zsh-5.9
+# Step 7: Create custom PKGBUILD for zsh-5.9
 echo "🛠️ Creating custom PKGBUILD for zsh-5.9..."
 progress_bar 5 "Creating zsh PKGBUILD..."
 mkdir -p "$AUR_PKGS_DIR/zsh"
@@ -199,22 +221,25 @@ package() {
 EOF
 chown -R "$MAIN_USER:$MAIN_USER" "$AUR_PKGS_DIR/zsh"
 
-# Step 7: Install zsh-5.9 from custom PKGBUILD
+# Step 8: Install zsh-5.9 from custom PKGBUILD
 echo "🛠️ Installing zsh-5.9 from custom PKGBUILD..."
 if ! pacman -Q zsh > /dev/null 2>&1 || ! /usr/bin/zsh --version | grep -q "5.9"; then
     progress_bar 15 "Installing zsh-5.9..."
     cd "$AUR_PKGS_DIR/zsh"
-    if ! sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1; then
-        echo "❌ zsh-5.9 installation failed! Checking for downloaded source..." >> "$MAKEPKG_LOG"
+    sudo -u "$MAIN_USER" makepkg -s --noconfirm >> "$MAKEPKG_LOG" 2>&1
+    if ls *.pkg.tar.zst > /dev/null 2>&1; then
+        pacman -U --noconfirm *.pkg.tar.zst >> "$MAKEPKG_LOG" 2>&1
+    else
+        echo "❌ No zsh package built! Check $MAKEPKG_LOG for errors." >> "$MAKEPKG_LOG"
         if [ -f "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" ]; then
             ACTUAL_SHA256=$(sha256sum "$AUR_PKGS_DIR/zsh/src/zsh-5.9.tar.xz" | awk '{print $1}')
             echo "📜 Expected SHA256: 9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5" >> "$MAKEPKG_LOG"
             echo "📜 Actual SHA256: $ACTUAL_SHA256" >> "$MAKEPKG_LOG"
-            echo "ℹ️ Update the sha256sums in $AUR_PKGS_DIR/zsh/PKGBUILD with the actual hash." >> "$MAKEPKG_LOG"
+            echo "ℹ Update the sha256sums in $AUR_PKGS_DIR/zsh/PKGBUILD with the actual hash." >> "$MAKEPKG_LOG"
         else
-            echo "⚠️ Source file zsh-5.9.tar.xz not found in $AUR_PKGS_DIR/zsh/src/" >> "$MAKEPKG_LOG"
-            echo "ℹ️ Try downloading manually: curl -L -o zsh-5.9.tar.xz https://sourceforge.net/projects/zsh/files/zsh/5.9/zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
-            echo "ℹ️ Compute SHA256: sha256sum zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
+            echo "⚠ Source file zsh-5.9.tar.xz not found in $AUR_PKGS_DIR/zsh/src/" >> "$MAKEPKG_LOG"
+            echo "ℹ Try downloading manually: curl -L -o zsh-5.9.tar.xz https://sourceforge.net/projects/zsh/files/zsh/5.9/zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
+            echo "ℹ Compute SHA256: sha256sum zsh-5.9.tar.xz" >> "$MAKEPKG_LOG"
         fi
         exit 1
     fi
@@ -222,7 +247,7 @@ if ! pacman -Q zsh > /dev/null 2>&1 || ! /usr/bin/zsh --version | grep -q "5.9";
 fi
 ZSH_PATH="/usr/bin/zsh"
 
-# Step 8: Create custom PKGBUILD for oh-my-zsh
+# Step 9: Create custom PKGBUILD for oh-my-zsh
 echo "🛠️ Creating custom PKGBUILD for oh-my-zsh (commit 3ff8c7e)..."
 progress_bar 5 "Creating oh-my-zsh PKGBUILD..."
 mkdir -p "$AUR_PKGS_DIR/oh-my-zsh"
@@ -247,19 +272,22 @@ package() {
 EOF
 chown -R "$MAIN_USER:$MAIN_USER" "$AUR_PKGS_DIR/oh-my-zsh"
 
-# Step 9: Install oh-my-zsh from custom PKGBUILD
+# Step 10: Install oh-my-zsh from custom PKGBUILD
 echo "🛠️ Installing oh-my-zsh from custom PKGBUILD..."
 if ! pacman -Q oh-my-zsh-git > /dev/null 2>&1; then
     progress_bar 10 "Installing oh-my-zsh..."
     cd "$AUR_PKGS_DIR/oh-my-zsh"
-    if ! sudo -u "$MAIN_USER" makepkg -si --noconfirm >> "$MAKEPKG_LOG" 2>&1; then
-        echo "❌ oh-my-zsh installation failed! Check $MAKEPKG_LOG for details." >> "$MAKEPKG_LOG"
+    sudo -u "$MAIN_USER" makepkg -s --noconfirm >> "$MAKEPKG_LOG" 2>&1
+    if ls *.pkg.tar.zst > /dev/null 2>&1; then
+        pacman -U --noconfirm *.pkg.tar.zst >> "$MAKEPKG_LOG" 2>&1
+    else
+        echo "❌ No oh-my-zsh package built! Check $MAKEPKG_LOG for errors." >> "$MAKEPKG_LOG"
         exit 1
     fi
     echo "oh-my-zsh-git" >> "$STATE_DIR/installed_packages"
 fi
 
-# Step 10: Prevent package updates
+# Step 11: Prevent package updates
 echo "🔒 Preventing updates for zsh and oh-my-zsh..."
 progress_bar 5 "Configuring pacman..."
 cp /etc/pacman.conf "$STATE_DIR/pacman.conf.bak"
@@ -267,7 +295,7 @@ if ! grep -q "IgnorePkg = zsh oh-my-zsh-git" /etc/pacman.conf; then
     echo "IgnorePkg = zsh oh-my-zsh-git" >> /etc/pacman.conf
 fi
 
-# Step 11: Apply font to virtual console
+# Step 12: Apply font to virtual console
 echo "⚙️ Configuring Terminus font for virtual console (Nerd Fonts not supported in vconsole)..."
 progress_bar 5 "Configuring virtual console font..."
 if [ -f /etc/vconsole.conf ]; then
@@ -277,7 +305,7 @@ echo "FONT=ter-v16n" > /etc/vconsole.conf
 mkfontscale /usr/share/fonts/terminus
 fc-cache -fv
 
-# Step 12: Configure JetBrains Mono Nerd Font for xfce4-terminal
+# Step 13: Configure JetBrains Mono Nerd Font for xfce4-terminal
 echo "⚙️ Configuring JetBrains Mono Nerd Font for xfce4-terminal..."
 progress_bar 5 "Configuring GUI terminal font..."
 mkdir -p "$USER_HOME/.config/xfce4/xfce4-terminal"
@@ -291,7 +319,7 @@ FontName=JetBrainsMono Nerd Font Bold 14
 EOF
 chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.config/xfce4/xfce4-terminal/terminalrc"
 
-# Step 13: Set zsh as default shell
+# Step 14: Set zsh as default shell
 echo "⚙️ Setting zsh as default shell for $MAIN_USER..."
 progress_bar 5 "Configuring shell..."
 if [ ! -f "$ZSH_PATH" ]; then
@@ -301,27 +329,27 @@ fi
 cp /etc/passwd "$STATE_DIR/passwd.bak"
 chsh -s "$ZSH_PATH" "$MAIN_USER"
 
-# Step 14: Configure .zshrc
+# Step 15: Configure .zshrc
 echo "⚙️ Configuring .zshrc for $MAIN_USER..."
 progress_bar 5 "Configuring .zshrc..."
-if [ -f "/home/$MAIN_USER/.zshrc" ]; then
-    cp "/home/$MAIN_USER/.zshrc" "$STATE_DIR/zshrc.bak"
+if [ -f "$USER_HOME/.zshrc" ]; then
+    cp "$USER_HOME/.zshrc" "$STATE_DIR/zshrc.bak"
 fi
-cat << EOF > "/home/$MAIN_USER/.zshrc"
+cat << EOF > "$USER_HOME/.zshrc"
 # Oh My Zsh configuration
 export ZSH="/usr/share/oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
+source "\$ZSH/oh-my-zsh.sh"
 
 # Basic settings
-export PATH="$HOME/bin:/usr/local/bin:$PATH"
+export PATH="\$HOME/bin:/usr/local/bin:\$PATH"
 alias ls='ls --color=auto'
 alias ll='ls -l'
 EOF
-chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.zshrc"
+chown "$MAIN_USER:$MAIN_USER" "$USER_HOME/.zshrc"
 
-# Step 15: Verify configuration
+# Step 16: Verify configuration
 echo "✅ Verifying configuration..."
 progress_bar 5 "Verifying configuration..."
 if ! "$ZSH_PATH" --version >/dev/null 2>&1; then
@@ -341,7 +369,14 @@ if [ ! -d "/usr/share/oh-my-zsh" ]; then
     exit 1
 fi
 
-# Step 16: Clean up state if successful
+# Step 17: Clean up sudoers
+echo "🔒 Removing temporary passwordless sudo for $MAIN_USER..."
+progress_bar 5 "Cleaning up sudo..."
+if [ -f "/etc/sudoers.d/99-$MAIN_USER" ]; then
+    rm -f "/etc/sudoers.d/99-$MAIN_USER"
+fi
+
+# Step 18: Clean up state if successful
 rm -rf "$STATE_DIR"
 echo "🎉 Step 2 complete: Zsh 5.9 and oh-my-zsh (commit 3ff8c7e) with fonts installed and configured! 🚀"
 echo "ℹ JetBrains Mono Nerd Font (Bold, size 14) applied to xfce4-terminal. For other GUI terminals (e.g., GNOME Terminal, Kitty), manually set 'JetBrainsMono Nerd Font Bold' in their preferences."
