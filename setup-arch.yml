@@ -6,21 +6,31 @@
     user_home: "/home/{{ main_user }}"
     aur_pkgs_dir: "{{ user_home }}/.aur_pkgs"
     zsh_version: 5.9
-    zsh_source_url: "https://sourceforge.net/projects/zsh/files/zsh/{{ zsh_version }}/zsh-{{ zsh_version }}.tar.xz"
+    zsh_source_url: "http://www.zsh.org/pub/zsh-{{ zsh_version }}.tar.xz"
     zsh_sha256: 9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5
     ohmyzsh_commit: 3ff8c7e
     ohmyzsh_dir: /usr/share/oh-my-zsh
   tasks:
-    - name: Ensure main user exists
-      user:
-        name: "{{ main_user }}"
-        state: present
+    - name: Check if main user exists
+      command: getent passwd {{ main_user }}
       register: user_check
+      changed_when: false
+      failed_when: user_check.rc != 0
+
+    - name: Extract user home directory
+      set_fact:
+        user_home: "{{ (user_check.stdout.split(':'))[5] }}"
+      when: user_check.rc == 0
+
+    - name: Debug user home directory
+      debug:
+        msg: "User {{ main_user }} home directory is {{ user_home }}"
+      when: user_check.rc == 0
 
     - name: Fail if user home does not exist
       fail:
         msg: "Home directory for {{ main_user }} ({{ user_home }}) does not exist!"
-      when: not user_check.state == 'present' or not (user_home | stat).exists
+      when: not (user_home | stat).exists
 
     - name: Update system
       pacman:
