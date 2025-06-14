@@ -10,8 +10,11 @@ NIX_LOG="$STATE_DIR/nix_errors.log"
 USER_HOME=""
 ZSH_URL="http://www.zsh.org/pub/zsh-5.9.tar.xz"
 NIX_CONFIG_DIR="/home/$MAIN_USER/.config/nixpkgs"
-ZSH_PATH="/nix/var/nix/profiles/default/bin/zsh" # Updated for daemon mode
-NIXPKGS_COMMIT="release-25.05" # Placeholder, will fetch latest commit
+ZSH_PATH="/nix/var/nix/profiles/default/bin/zsh"
+NIX_VERSION="2.24.9"
+NIX_INSTALLER_URL="https://releases.nixos.org/nix/nix-$NIX_VERSION/nix-$NIX_VERSION-x86_64-linux.tar.xz"
+NIX_INSTALLER_SHA256="b7a829f3d663d0f06b4b7b5f9a4f95a2b8f6e8f3a7b9a6b7b8f6e8f3a7b9a6b7" # Placeholder, to be updated
+NIXPKGS_COMMIT="5f4f306bea96741f1588ea4f450b2a2e29f42b98"
 OHMYZSH_COMMIT="3ff8c7e"
 PACKAGES=("zsh" "oh-my-zsh" "nerdfonts" "terminus_font")
 
@@ -23,6 +26,7 @@ log() {
 # Function to handle errors
 error() {
     echo "❌ $1" >&2
+    echo "❌ $1" >> "$NIX_LOG"
     exit 1
 }
 
@@ -45,8 +49,10 @@ cleanup() {
             rm -rf "/home/$MAIN_USER/.nix-profile"
             rm -rf "/home/$MAIN_USER/.nix-defexpr"
             rm -rf "/home/$MAIN_USER/.nix-channels"
+            rm -rf "/home/$MAIN_USER/.nix/registry.json"
             rm -rf "/home/$MAIN_USER/.config/nix"
             rm -rf "/home/$MAIN_USER/.config/nixpkgs"
+            rm -rf /etc/nix
         fi
     fi
     if [ -f "$STATE_DIR/zshrc.bak" ]; then
@@ -75,31 +81,35 @@ trap cleanup ERR
 
 # Function: Check prerequisites
 check_prerequisites() {
-    log "🔍 Checking prerequisites..."
+    log "🔍 [1/9] Checking prerequisites..."
     mkdir -p "$STATE_DIR"
     touch "$NIX_LOG"
     if [ ! "$(id -u "$MAIN_USER" 2>/dev/null)" ]; then
-        error "User $MAIN_USER does not exist!" >> "$NIX_LOG"
+        error "User $MAIN_USER does not exist!"
     fi
     USER_HOME=$(getent passwd "$MAIN_USER" | cut -d: -f6)
     if [ ! -d "$USER_HOME" ]; then
-        error "Home directory for $MAIN_USER ($USER_HOME) does not exist!" >> "$NIX_LOG"
+        error "Home directory for $MAIN_USER ($USER_HOME) does not exist!"
     fi
     log "✅ User $MAIN_USER exists with home $USER_HOME"
     if ! ping -c 1 google.com >/dev/null 2>>"$NIX_LOG"; then
-        error "No internet connection!" >> "$NIX_LOG"
+        error "No internet connection!"
     fi
     log "✅ Internet connection OK"
-    if [ $(df / | tail -1 | awk '{print $4}') -lt 5000000 ]; then
-        error "Less than 5GB free disk space on /!" >> "$NIX_LOG"
-    fi
-    log "✅ Sufficient disk space"
     if ! curl -L --head "$ZSH_URL" >/dev/null 2>>"$NIX_LOG"; then
-        error "zsh-5.9 source URL ($ZSH_URL) is unreachable!" >> "$NIX_LOG"
+        error "zsh-5.9 source URL ($ZSH_URL) is unreachable!"
     fi
     log "✅ zsh-5.9 source URL OK"
+    if ! curl -L --head "$NIX_INSTALLER_URL" >/dev/null 2>>"$NIX_LOG"; then
+        error "Nix installer URL ($NIX_INSTALLER_URL) is unreachable!"
+    fi
+    log "✅ Nix installer URL OK"
+    if [ $(df / | tail -1 | awk '{print $4}') -lt 5000000 ]; then
+        error "Less than 5GB free disk space on /!"
+    fi
+    log "✅ Sufficient disk space"
     if ! systemctl status >/dev/null 2>>"$NIX_LOG"; then
-        error "Systemd not running, required for nix-daemon!" >> "$NIX_LOG"
+        error "Systemd not running, required for nix-daemon!"
     fi
     log "✅ Systemd OK"
     log "🔍 Prerequisites check complete"
@@ -107,14 +117,14 @@ check_prerequisites() {
 
 # Function: Update Arch system
 update_system() {
-    log "🔄 Updating Arch system..."
+    log "🔄 [2/9] Updating Arch system..."
     pacman -Syu --noconfirm
     log "✅ System updated"
 }
 
 # Function: Install base packages
 install_base_packages() {
-    log "📦 Installing base packages..."
+    log "📦 [3/9] Installing base packages..."
     if pacman -Q git curl terminus-font xorg-mkfontscale >/dev/null 2>&1; then
         log "⚠️ Some base packages already installed."
     else
@@ -126,14 +136,22 @@ install_base_packages() {
 
 # Function: Install Nix package manager
 install_nix() {
-    log "[1/9] Installing Nix package manager..."
+    log "🛠️ [4/9] Installing Nix package manager ($NIX_VERSION)..."
     if ! command -v nix >/dev/null; then
-        sh <(curl -L https://nixos.org/nix/install) --daemon --no-channel-add 2>&1 | tee -a "$NIX_LOG" || 
+        curl -L "$NIX_INSTALLER_URL" -o "/tmp/nix-$NIX_VERSION.tar.xz" 2>&1 | tee -a "$NIX_LOG"
+        echo "$NIX_INSTALLER_SHA256  /tmp/nix-$NIX_VERSION.tar.xz" | sha256sum -c - 2>&1 | tee -a "$NIX_LOG" || 
+            error "Nix installer SHA256 mismatch!"
+        tar -xf "/tmp/nix-$NIX_VERSION.tar.xz" -C /tmp
+        sh "/tmp/nix-$NIX_VERSION-x86_64-linux/install" --daemon --no-channel-add 2>&1 | tee -a "$NIX_LOG" || 
             error "Nix installation failed"
+        rm -rf "/tmp/nix-$NIX_VERSION.tar.xz" "/tmp/nix-$NIX_VERSION-x86_64-linux"
         if [ ! -f /etc/profile.d/nix.sh ]; then
             error "Nix environment script not found!"
         fi
         source /etc/profile.d/nix.sh || error "Nix environment sourcing failed"
+        if ! systemctl status nix-daemon.service >/dev/null 2>>"$NIX_LOG"; then
+            error "nix-daemon not running!"
+        fi
         touch "$STATE_DIR/nix_installed"
     else
         log "⚠️ Nix already installed, skipping."
@@ -143,31 +161,28 @@ install_nix() {
 
 # Function: Configure Nix environment
 configure_nix() {
-    log "[2/9] Configuring Nix environment..."
+    log "⚙️ [5/9] Configuring Nix environment..."
     mkdir -p /etc/nix
-    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
-    echo "substituters = https://cache.nixos.org/" >> /etc/nix/nix.conf
-    echo "trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" >> /etc/nix/nix.conf
-    systemctl restart nix-daemon.service || error "Failed to restart nix-daemon"
+    cat << EOF > /etc/nix/nix.conf
+experimental-features = nix-command flakes
+substituters = https://cache.nixos.org/
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+EOF
+    systemctl restart nix-daemon.service 2>&1 | tee -a "$NIX_LOG" || error "Failed to restart nix-daemon"
     log "✅ Nix configured"
 }
 
 # Function: Pin Nixpkgs to 25.05
 pin_nixpkgs() {
-    log "[3/9] Pinning nixpkgs to 25.05..."
-    # Fetch latest commit for release-25.05 branch
-    NIXPKGS_COMMIT=$(curl -s "https://api.github.com/repos/NixOS/nixpkgs/branches/release-25.05" | grep -o '"sha": "[^"]*"' | cut -d'"' -f4)
-    if [ -z "$NIXPKGS_COMMIT" ]; then
-        error "Failed to fetch release-25.05 commit!" >> "$NIX_LOG"
-    fi
-    sudo -u "$MAIN_USER" nix registry add nixpkgs "github:NixOS/nixpkgs/$NIXPKGS_COMMIT" 2>&1 | tee -a "$NIX_LOG" || 
+    log "📌 [6/9] Pinning nixpkgs to commit $NIXPKGS_COMMIT..."
+    sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix registry add nixpkgs github:NixOS/nixpkgs/$NIXPKGS_COMMIT" 2>&1 | tee -a "$NIX_LOG" || 
         error "Failed to pin nixpkgs to commit $NIXPKGS_COMMIT"
     log "✅ Nixpkgs pinned to commit $NIXPKGS_COMMIT"
 }
 
 # Function: Install Nix packages
 install_packages() {
-    log "[4/9] Installing zsh-5.9, oh-my-zsh, and fonts..."
+    log "🛠️ [7/9] Installing zsh-5.9, oh-my-zsh, and fonts..."
     mkdir -p "$NIX_CONFIG_DIR"
     chown "$MAIN_USER:$MAIN_USER" "$NIX_CONFIG_DIR"
     cat << EOF > "$NIX_CONFIG_DIR/config.nix"
@@ -188,18 +203,18 @@ install_packages() {
         sha256 = "1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2"; # Placeholder
       };
     });
+    nerdfonts = pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; };
   };
 }
 EOF
     chown "$MAIN_USER:$MAIN_USER" "$NIX_CONFIG_DIR/config.nix"
-    # Fetch oh-my-zsh sha256
-    OHMYZSH_SHA256=$(sudo -u "$MAIN_USER" nix-prefetch-url --type sha256 --unpack "https://github.com/ohmyzsh/ohmyzsh/archive/$OHMYZSH_COMMIT.tar.gz" 2>>"$NIX_LOG")
+    OHMYZSH_SHA256=$(sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-prefetch-url --type sha256 --unpack https://github.com/ohmyzsh/ohmyzsh/archive/$OHMYZSH_COMMIT.tar.gz" 2>>"$NIX_LOG")
     if [ -z "$OHMYZSH_SHA256" ]; then
-        error "Failed to fetch sha256 for oh-my-zsh commit $OHMYZSH_COMMIT!" >> "$NIX_LOG"
+        error "Failed to fetch sha256 for oh-my-zsh commit $OHMYZSH_COMMIT!"
     fi
     sed -i "s|sha256 = \"1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2\";|sha256 = \"$OHMYZSH_SHA256\";|" "$NIX_CONFIG_DIR/config.nix"
     for pkg in "${PACKAGES[@]}"; do
-        sudo -u "$MAIN_USER" nix profile install "nixpkgs#$pkg" 2>&1 | tee -a "$NIX_LOG" || 
+        sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix profile install nixpkgs#$pkg" 2>&1 | tee -a "$NIX_LOG" || 
             error "Failed to install $pkg"
     done
     echo "zsh oh-my-zsh nerdfonts terminus_font" >> "$STATE_DIR/installed_packages"
@@ -208,9 +223,9 @@ EOF
 
 # Function: Configure zsh
 configure_zsh() {
-    log "[5/9] Configuring zsh for $MAIN_USER..."
+    log "⚙️ [8/9] Configuring zsh for $MAIN_USER..."
     if [ ! -f "$ZSH_PATH" ]; then
-        error "zsh not found at $ZSH_PATH!" >> "$NIX_LOG"
+        error "zsh not found at $ZSH_PATH!"
     fi
     cp /etc/passwd "$STATE_DIR/passwd.bak"
     chsh -s "$ZSH_PATH" "$MAIN_USER"
@@ -233,31 +248,31 @@ EOF
 
 # Function: Configure virtual console font
 configure_fonts() {
-    log "[6/9] Configuring Terminus font for virtual console..."
+    log "⚙️ [9/9] Configuring Terminus font for virtual console..."
     if [ -f /etc/vconsole.conf ]; then
         cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
     fi
-    echo "FONT=ter-v16n" > /etc/vconsole.log
-    mv /tmp/vconsole.log /etc/vconsole.conf
-    mkfontscale /usr/share/fonts/
-    fc-cache -fv
+    echo "FONT=ter-v16n" > /tmp/vconsole.conf
+    mv /tmp/vconsole.conf /etc/vconsole.conf
+    mkfontscale /usr/share/fonts/terminus 2>&1 | tee -a "$NIX_LOG"
+    fc-cache -fv 2>&1 | tee -a "$NIX_LOG"
     log "✅ Fonts configured"
 }
 
 # Function: Verify setup
 verify_setup() {
-    log "[7/7] Verifying configuration..."
+    log "✅ Verifying configuration..."
     if ! "$ZSH_PATH" --version >/dev/null 2>>"$NIX_LOG"; then
-        error "zsh binary not executable!" >> "$NIX_LOG"
+        error "zsh binary not executable!"
     fi
     if ! "$ZSH_PATH" --version | grep -q "5.9"; then
-        error "zsh version verification failed! Expected 5.9" >> "$NIX_LOG"
+        error "zsh version verification failed! Expected 5.9"
     fi
     if ! grep -q "$ZSH_PATH" /etc/passwd; then
-        error "zsh not set as default shell!" >> "$NIX_LOG"
+        error "zsh not set as default shell!"
     fi
-    if [ -d "/nix/var/nix/profiles/default/share/oh-my-zsh" ]; then
-        error "oh-my-zsh not installed correctly!" >> "$NIX/$LOG_FILE"
+    if [ ! -d "/nix/var/nix/profiles/default/share/oh-my-zsh" ]; then
+        error "oh-my-zsh not installed correctly!"
     fi
     log "✅ Setup verified"
 }
@@ -265,7 +280,7 @@ verify_setup() {
 # Main execution
 log "🚀 Starting Arch Linux Setup for $MAIN_USER: Step 2 - Nix Package Manager (Nixpkgs 25.05)"
 if [ "$(id -u)" -ne 0 ]; then
-    error "❌ This script must be run with sudo!"
+    error "This script must be run with sudo!"
 fi
 check_prerequisites
 update_system
@@ -279,9 +294,9 @@ configure_fonts
 verify_setup
 rm -rf "$STATE_DIR"
 log "🎉 Setup complete: Nix with zsh-5.9, oh-my-zsh ($OHMYZSH_COMMIT), and fonts installed!"
-log "ℹ JetBrains Mono Nerd Font installed for GUI terminals (configure manually)."
-log "ℹ Virtual console uses Terminus font."
-log "ℹ zsh is the default shell. Log out and in to use."
-log "ℹ Nixpkgs pinned to 25.05. Source /etc/profile.d/nix.sh to use Nix."
-log "ℹ Nix config in $NIX_CONFIG_DIR for reproducibility."
-log "ℹ If using XFCE, add xfce4-terminal config: echo '[Configuration]\nFontName=JetBrainsMono Nerd Font Bold 14' > ~/.config/xfce4/xfce4-terminal/terminalrc"
+log "ℹ️ JetBrains Mono Nerd Font installed for GUI terminals (configure manually)."
+log "ℹ️ Virtual console uses Terminus font (ter-v16n)."
+log "ℹ️ zsh is the default shell. Log out and log in to use."
+log "ℹ️ Nixpkgs pinned to commit $NIXPKGS_COMMIT. Source /etc/profile.d/nix.sh to use Nix."
+log "ℹ️ Nix config in $NIX_CONFIG_DIR for reproducibility."
+log "ℹ️ If using XFCE, add xfce4-terminal config: echo '[Configuration]\nFontName=JetBrainsMono Nerd Font Bold 14' > ~/.config/xfce4/xfce4-terminal/terminalrc"
