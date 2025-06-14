@@ -16,7 +16,7 @@ NIX_INSTALLER_URL="https://releases.nixos.org/nix/nix-$NIX_VERSION/nix-$NIX_VERS
 NIX_INSTALLER_SHA256="3c0779e4878d1289cf3fbb158ec5ea9bdf61dfb9b4efac6b3b0b6bec5ba4cf13"
 NIXPKGS_COMMIT="5f4f306bea96741f1588ea4f450b2a2e29f42b98"
 OHMYZSH_COMMIT="3ff8c7e"
-PACKAGES=("zsh" "oh-my-zsh" "nerdfonts" "terminus_font")
+PACKAGES=("zsh" "oh-my-zsh" "jetbrains-mono-nerdfont" "terminus_font")
 
 # Function to log messages
 log() {
@@ -205,7 +205,8 @@ install_packages() {
         sha256 = "1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2"; # Placeholder
       };
     });
-    nerdfonts = pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; };
+    jetbrains-mono-nerdfont = pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; };
+    terminus_font = pkgs.terminus_font;
   };
 }
 EOF
@@ -219,13 +220,26 @@ EOF
         sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix profile install nixpkgs#$pkg" 2>&1 | tee -a "$NIX_LOG" || 
             error "Failed to install $pkg"
     done
-    echo "zsh oh-my-zsh nerdfonts terminus_font" >> "$STATE_DIR/installed_packages"
+    echo "zsh oh-my-zsh jetbrains-mono-nerdfont terminus_font" >> "$STATE_DIR/installed_packages"
     log "✅ Packages installed"
+}
+
+# Function: Configure fonts
+configure_fonts() {
+    log "⚙️ [8/9] Configuring Terminus font for virtual console and JetBrainsMono for GUI..."
+    if [ -f /etc/vconsole.conf ]; then
+        cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
+    fi
+    echo "FONT=ter-v16n" > /tmp/vconsole.conf
+    mv /tmp/vconsole.conf /etc/vconsole.conf
+    mkfontscale /usr/share/fonts/terminus 2>&1 | tee -a "$NIX_LOG"
+    sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && fc-cache -fv" 2>&1 | tee -a "$NIX_LOG"
+    log "✅ Fonts configured"
 }
 
 # Function: Configure zsh
 configure_zsh() {
-    log "⚙️ [8/9] Configuring zsh for $MAIN_USER..."
+    log "⚙️ [9/9] Configuring zsh for $MAIN_USER..."
     if [ ! -f "$ZSH_PATH" ]; then
         error "zsh not found at $ZSH_PATH!"
     fi
@@ -248,19 +262,6 @@ EOF
     log "✅ zsh configured"
 }
 
-# Function: Configure virtual console font
-configure_fonts() {
-    log "⚙️ [9/9] Configuring Terminus font for virtual console..."
-    if [ -f /etc/vconsole.conf ]; then
-        cp /etc/vconsole.conf "$STATE_DIR/vconsole.conf.bak"
-    fi
-    echo "FONT=ter-v16n" > /tmp/vconsole.conf
-    mv /tmp/vconsole.conf /etc/vconsole.conf
-    mkfontscale /usr/share/fonts/terminus 2>&1 | tee -a "$NIX_LOG"
-    fc-cache -fv 2>&1 | tee -a "$NIX_LOG"
-    log "✅ Fonts configured"
-}
-
 # Function: Verify setup
 verify_setup() {
     log "✅ Verifying configuration..."
@@ -275,6 +276,9 @@ verify_setup() {
     fi
     if [ ! -d "/nix/var/nix/profiles/default/share/oh-my-zsh" ]; then
         error "oh-my-zsh not installed correctly!"
+    fi
+    if ! fc-list | grep -q "JetBrainsMono"; then
+        error "JetBrainsMono Nerd Font not installed correctly!"
     fi
     log "✅ Setup verified"
 }
@@ -291,8 +295,8 @@ install_nix
 configure_nix
 pin_nixpkgs
 install_packages
-configure_zsh
 configure_fonts
+configure_zsh
 verify_setup
 rm -rf "$STATE_DIR"
 log "🎉 Setup complete: Nix with zsh-5.9, oh-my-zsh ($OHMYZSH_COMMIT), and fonts installed!"
