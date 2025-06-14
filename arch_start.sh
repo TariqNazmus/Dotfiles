@@ -13,7 +13,7 @@ NIX_CONFIG_DIR="/home/$MAIN_USER/.config/nixpkgs"
 ZSH_PATH="/nix/var/nix/profiles/default/bin/zsh"
 NIX_VERSION="2.24.9"
 NIX_INSTALLER_URL="https://releases.nixos.org/nix/nix-$NIX_VERSION/nix-$NIX_VERSION-x86_64-linux.tar.xz"
-NIX_INSTALLER_SHA256="b7a829f3d663d0f06b4b7b5f9a4f95a2b8f6e8f3a7b9a6b7b8f6e8f3a7b9a6b7" # Placeholder, to be updated
+NIX_INSTALLER_SHA256="3c0779e4878d1289cf3fbb158ec5ea9bdf61dfb9b4efac6b3b0b6bec5ba4cf13"
 NIXPKGS_COMMIT="5f4f306bea96741f1588ea4f450b2a2e29f42b98"
 OHMYZSH_COMMIT="3ff8c7e"
 PACKAGES=("zsh" "oh-my-zsh" "nerdfonts" "terminus_font")
@@ -139,8 +139,10 @@ install_nix() {
     log "🛠️ [4/9] Installing Nix package manager ($NIX_VERSION)..."
     if ! command -v nix >/dev/null; then
         curl -L "$NIX_INSTALLER_URL" -o "/tmp/nix-$NIX_VERSION.tar.xz" 2>&1 | tee -a "$NIX_LOG"
+        log "🔍 Downloaded tarball SHA256:"
+        sha256sum "/tmp/nix-$NIX_VERSION.tar.xz" | tee -a "$NIX_LOG"
         echo "$NIX_INSTALLER_SHA256  /tmp/nix-$NIX_VERSION.tar.xz" | sha256sum -c - 2>&1 | tee -a "$NIX_LOG" || 
-            error "Nix installer SHA256 mismatch!"
+            error "Nix installer SHA256 mismatch! Expected $NIX_INSTALLER_SHA256, see $NIX_LOG for actual."
         tar -xf "/tmp/nix-$NIX_VERSION.tar.xz" -C /tmp
         sh "/tmp/nix-$NIX_VERSION-x86_64-linux/install" --daemon --no-channel-add 2>&1 | tee -a "$NIX_LOG" || 
             error "Nix installation failed"
