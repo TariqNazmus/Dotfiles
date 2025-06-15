@@ -170,6 +170,8 @@ experimental-features = nix-command flakes
 substituters = https://cache.nixos.org/
 trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 EOF
+    echo "export NIX_PATH=nixpkgs=/home/$MAIN_USER/.nix-defexpr/nixpkgs" >> "/home/$MAIN_USER/.bashrc"
+    chown "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.bashrc"
     systemctl restart nix-daemon.service 2>&1 | tee -a "$NIX_LOG" || error "Failed to restart nix-daemon"
     log "✅ Nix configured"
 }
@@ -179,6 +181,10 @@ pin_nixpkgs() {
     log "📌 [6/9] Pinning nixpkgs to commit $NIXPKGS_COMMIT..."
     sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix registry add nixpkgs github:NixOS/nixpkgs/$NIXPKGS_COMMIT" 2>&1 | tee -a "$NIX_LOG" || 
         error "Failed to pin nixpkgs to commit $NIXPKGS_COMMIT"
+    mkdir -p "/home/$MAIN_USER/.nix-defexpr"
+    ln -sf "/nix/var/nix/profiles/per-user/$MAIN_USER/channels/nixpkgs" "/home/$MAIN_USER/.nix-defexpr/nixpkgs" 2>>"$NIX_LOG" || 
+        error "Failed to link nixpkgs for NIX_PATH"
+    chown -R "$MAIN_USER:$MAIN_USER" "/home/$MAIN_USER/.nix-defexpr"
     log "✅ Nixpkgs pinned to commit $NIXPKGS_COMMIT"
 }
 
@@ -189,25 +195,27 @@ install_packages() {
     chown "$MAIN_USER:$MAIN_USER" "$NIX_CONFIG_DIR"
     cat << EOF > "$NIX_CONFIG_DIR/config.nix"
 {
-  packageOverrides = pkgs: {
-    zsh = pkgs.zsh.overrideAttrs (old: {
-      version = "5.9";
-      src = pkgs.fetchurl {
-        url = "http://www.zsh.org/pub/zsh-5.9.tar.xz";
-        sha256 = "9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5";
-      };
-    });
-    oh-my-zsh = pkgs.oh-my-zsh.overrideAttrs (old: {
-      src = pkgs.fetchFromGitHub {
-        owner = "ohmyzsh";
-        repo = "ohmyzsh";
-        rev = "$OHMYZSH_COMMIT";
-        sha256 = "1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2"; # Placeholder
-      };
-    });
-    jetbrains-mono-nerdfont = pkgs.nerdfonts.override { fonts = [ "JetBrainsMono" ]; };
-    terminus_font = pkgs.terminus_font;
-  };
+  nixpkgs.overlays = [
+    (self: super: {
+      zsh = super.zsh.overrideAttrs (old: {
+        version = "5.9";
+        src = super.fetchurl {
+          url = "http://www.zsh.org/pub/zsh-5.9.tar.xz";
+          sha256 = "9b8d1ecedd5b5e81fbf1918e876752a7dd948e05c1a0dba10ab863842d45acd5";
+        };
+      });
+      oh-my-zsh = super.oh-my-zsh.overrideAttrs (old: {
+        src = super.fetchFromGitHub {
+          owner = "ohmyzsh";
+          repo = "ohmyzsh";
+          rev = "$OHMYZSH_COMMIT";
+          sha256 = "1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2"; # Placeholder
+        };
+      });
+      jetbrains-mono-nerdfont = super.nerdfonts.override { fonts = [ "JetBrainsMono" ]; };
+      terminus_font = super.terminus_font;
+    })
+  ];
 }
 EOF
     chown "$MAIN_USER:$MAIN_USER" "$NIX_CONFIG_DIR/config.nix"
@@ -216,10 +224,8 @@ EOF
         error "Failed to fetch sha256 for oh-my-zsh commit $OHMYZSH_COMMIT!"
     fi
     sed -i "s|sha256 = \"1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2\";|sha256 = \"$OHMYZSH_SHA256\";|" "$NIX_CONFIG_DIR/config.nix"
-    for pkg in "${PACKAGES[@]}"; do
-        sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-env -iA nixpkgs.$pkg" 2>&1 | tee -a "$NIX_LOG" || 
-            error "Failed to install $pkg"
-    done
+    sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-shell -p nix --run 'nix-env -i ${PACKAGES[*]}' --arg config 'import $NIX_CONFIG_DIR/config.nix'" 2>&1 | tee -a "$NIX_LOG" || 
+        error "Failed to install packages: ${PACKAGES[*]}"
     echo "zsh oh-my-zsh jetbrains-mono-nerdfont terminus_font" >> "$STATE_DIR/installed_packages"
     log "✅ Packages installed"
 }
@@ -241,7 +247,9 @@ configure_fonts() {
 configure_zsh() {
     log "⚙️ [9/9] Configuring zsh for $MAIN_USER..."
     if [ ! -f "$ZSH_PATH" ]; then
-        error "zsh not found at $ZSH_PATH!"
+        log "⚠️ zsh not found at $ZSH_PATH, attempting to reinstall..."
+        sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-shell -p nix --run 'nix-env -i zsh' --arg config 'import $NIX_CONFIG_DIR/config.nix'" 2>&1 | tee -a "$NIX_LOG" || 
+            error "Failed to reinstall zsh"
     fi
     cp /etc/passwd "$STATE_DIR/passwd.bak"
     chsh -s "$ZSH_PATH" "$MAIN_USER"
@@ -280,6 +288,7 @@ verify_setup() {
     if ! fc-list | grep -q "JetBrainsMono"; then
         error "JetBrainsMono Nerd Font not installed correctly!"
     fi
+    sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-env -q" >> "$NIX_LOG"
     log "✅ Setup verified"
 }
 
