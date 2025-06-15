@@ -7,13 +7,13 @@ set -e
 sudo pacman -Syu --noconfirm
 sudo pacman -S --noconfirm base-devel git
 
-# Install yay (AUR helper)
+# Install yay (AUR helper) as user sadat
 if ! command -v yay &> /dev/null; then
-    git clone https://aur.archlinux.org/yay.git /tmp/yay
-    cd /tmp/yay
+    git clone https://aur.archlinux.org/yay.git ~/yay
+    cd ~/yay
     makepkg -si --noconfirm
     cd ~
-    rm -rf /tmp/yay
+    rm -rf ~/yay
 fi
 
 # Install Hyprland and dependencies
@@ -58,7 +58,7 @@ EOF
 # Set up zsh with Oh My Zsh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.oh-my-zoh-my-zsh/custom/plugins/zsh-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
 cat << 'EOF' > ~/.zshrc
 ZSH_THEME="agnoster"
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
