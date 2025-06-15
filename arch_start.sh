@@ -217,7 +217,7 @@ EOF
     fi
     sed -i "s|sha256 = \"1m3z4v3z4q3z4x7x0v3z4q3z4w0v3lw3p4n0i1w63lh3g6f3h5d2\";|sha256 = \"$OHMYZSH_SHA256\";|" "$NIX_CONFIG_DIR/config.nix"
     for pkg in "${PACKAGES[@]}"; do
-        sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix profile install nixpkgs#$pkg" 2>&1 | tee -a "$NIX_LOG" || 
+        sudo -u "$MAIN_USER" bash -c "source /etc/profile.d/nix.sh && nix-env -iA nixpkgs.$pkg" 2>&1 | tee -a "$NIX_LOG" || 
             error "Failed to install $pkg"
     done
     echo "zsh oh-my-zsh jetbrains-mono-nerdfont terminus_font" >> "$STATE_DIR/installed_packages"
